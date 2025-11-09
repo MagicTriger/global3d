@@ -79,6 +79,7 @@ const props = defineProps<Props>();
 const ready = ref(false);
 const needsGesture = ref(false);
 const mode = ref<'webgl' | 'three' | 'css3d' | 'video'>('video');
+const isPlaying = ref(false);
 const videoRef = ref<HTMLVideoElement | null>(null);
 const krpanoId = `krpano-${Math.random().toString(36).slice(2)}`;
 const threeMount = ref<HTMLDivElement | null>(null);
@@ -137,7 +138,7 @@ async function setupKrpanoOrFallback() {
     // three 模式下也需要视频源作为纹理
     await setupVideo();
     await setupThree();
-    ready.value = true;
+    // three 模式在视频真正开始播放后再标记 ready，避免黑屏
   } else {
     // WebGL 不可用：优先 CSS3D 占位，否则视频保底
     mode.value = 'css3d';
@@ -156,6 +157,13 @@ async function setupVideo() {
   if (!v) return;
   // 确保循环播放
   v.loop = true;
+  // 移动端内联播放与跨域纹理
+  v.muted = true;
+  v.setAttribute('muted', '');
+  v.playsInline = true as any;
+  v.setAttribute('playsinline', '');
+  try { (v as any).webkitPlaysInline = true; } catch {}
+  v.crossOrigin = 'anonymous';
 
   const source = props.hlsSrc || props.lowSrc || props.highSrc || '';
   if (!source) return;
@@ -186,6 +194,7 @@ async function setupVideo() {
 
   // 播放开始后，如果是 three 模式则初始化视频纹理
   v.addEventListener('playing', () => {
+    isPlaying.value = true;
     if (mode.value === 'three' && renderer && scene && camera) {
       if (!videoTexture) {
         videoTexture = new THREE.VideoTexture(v);
@@ -195,6 +204,7 @@ async function setupVideo() {
       }
     }
     // 视频开始播放（three/video），通知加载完成
+    ready.value = true;
     window.dispatchEvent(new CustomEvent('panorama:loaded', { detail: { mode: mode.value } }));
   });
 
@@ -205,6 +215,22 @@ async function setupVideo() {
       // iOS 等环境可能需要手势重新触发
       needsGesture.value = isIOS();
     });
+  });
+
+  // 自动播放失败兜底：短暂等待后仍未开始播放则提示手势
+  setTimeout(() => {
+    if (!isPlaying.value) {
+      needsGesture.value = true;
+    }
+  }, 1500);
+
+  // 视频错误降级：切换到 CSS3D 占位，避免黑屏
+  v.addEventListener('error', () => {
+    if (mode.value !== 'css3d') {
+      mode.value = 'css3d';
+      ready.value = true;
+      window.dispatchEvent(new CustomEvent('panorama:loaded', { detail: { mode: 'css3d' } }));
+    }
   });
 }
 
