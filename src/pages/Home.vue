@@ -14,10 +14,11 @@
 import { ref, onMounted, onUnmounted } from 'vue';
 import PanoramaPlayer from '../components/PanoramaPlayer.vue';
 import LoadingScreen from './LoadingScreen.vue';
+const BASE = import.meta.env.BASE_URL;
 
-// 使用本地 MP4 全景视频作为纹理源
-const poster = '/vite.svg';
-const lowSrc = '/videos/大殿全景.mp4';
+// 使用本地 MP4 全景视频作为纹理源（适配 GitHub Pages 子路径）
+const poster = BASE + 'vite.svg';
+const lowSrc = BASE + 'videos/大殿全景.mp4';
 // 初始视角：略向下以鸟瞰效果，可按需调整
 const initialPitchDeg = 20;
 
