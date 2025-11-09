@@ -7,7 +7,7 @@ import { ref, type Ref } from 'vue';
 import Hls from 'hls.js';
 import type { VideoSource, VideoLoaderConfig, VideoQuality } from '../types/panorama';
 import logger from '../utils/logger';
-import { isIOS, isHlsSupported, isMobile, isAndroid, assessDevicePerformance } from '../utils/env';
+import { isIOS, isHlsSupported, isAndroid, assessDevicePerformance } from '../utils/env';
 import memoryMonitor from '../utils/memoryMonitor';
 
 /**
@@ -77,19 +77,10 @@ export function useVideoLoader() {
     video.setAttribute('x5-video-player-fullscreen', 'false');
     video.setAttribute('x5-video-orientation', 'portraint'); // 竖屏模式
 
-    // 预加载策略 - 移动端优化
-    // 移动端统一使用 metadata，避免过度缓冲导致卡顿
-    const devicePerf = assessDevicePerformance();
-    if (isMobile()) {
-      video.preload = 'metadata'; // 移动端只加载元数据
-      logger.info('video', '移动端：使用 metadata 预加载策略');
-    } else if (devicePerf.performanceScore === 'high') {
-      video.preload = 'auto'; // 高性能桌面设备可以预加载
-      logger.info('video', '高性能设备：使用 auto 预加载策略');
-    } else {
-      video.preload = 'metadata'; // 默认使用 metadata
-      logger.info('video', '标准设备：使用 metadata 预加载策略');
-    }
+    // 取消预加载策略 - 使用 none 以最快速度显示页面
+    // 视频将在用户交互或自动播放时才开始加载
+    video.preload = 'none';
+    logger.info('video', '使用 none 预加载策略，按需加载视频');
 
     // 跨域设置
     video.crossOrigin = 'anonymous';

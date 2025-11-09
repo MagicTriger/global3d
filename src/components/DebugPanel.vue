@@ -5,7 +5,7 @@
       <button class="debug-toggle" @click="toggleExpanded">
         {{ expanded ? '▼' : '▶' }}
       </button>
-      <button class="debug-close" @click="visible = false">✕</button>
+      <button class="debug-close" @click="emit('close')">✕</button>
     </div>
 
     <div v-if="expanded" class="debug-content">
@@ -147,6 +147,8 @@ import {
   hasTouchSupport,
   assessDevicePerformance,
 } from '../utils/env';
+
+const emit = defineEmits(['close']);
 
 const visible = ref(true);
 const expanded = ref(true);

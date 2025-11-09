@@ -25,7 +25,17 @@
       :error="loadingError"
       @retry="handleRetry"
     />
-    <DebugPanel v-if="showDebug" />
+    <DebugPanel v-if="showDebug" @close="showDebug = false" />
+
+    <!-- 调试按钮 -->
+    <button
+      v-if="!showDebug && !loadingVisible"
+      class="debug-toggle-btn"
+      title="打开调试面板"
+      @click="showDebug = true"
+    >
+      🔧
+    </button>
   </section>
 </template>
 
@@ -35,8 +45,8 @@ import PanoramaPlayer from '../components/PanoramaPlayer.vue';
 import LoadingScreen from './LoadingScreen.vue';
 import DebugPanel from '../components/DebugPanel.vue';
 
-// 显示调试面板（始终显示，方便手机端调试）
-const showDebug = ref(true);
+// 显示调试面板（默认隐藏，点击图标打开）
+const showDebug = ref(false);
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -122,5 +132,32 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-/* 样式已移至模板的 inline style 和 class */
+.debug-toggle-btn {
+  position: fixed;
+  top: 70px;
+  right: 15px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(96, 165, 250, 0.9);
+  border: none;
+  color: #fff;
+  font-size: 20px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  z-index: 9998;
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.debug-toggle-btn:hover {
+  transform: scale(1.1);
+  background: rgba(96, 165, 250, 1);
+}
+
+.debug-toggle-btn:active {
+  transform: scale(0.95);
+}
 </style>

@@ -9,7 +9,6 @@ import {
   detectWebGLVersion,
   detectCSS3DSupport,
   detectVideoFormats,
-  detectAutoplayPolicy,
   isMobile,
   isIOS,
   isAndroid,
@@ -66,18 +65,10 @@ export function useCompatibility() {
         Promise.resolve(assessDevicePerformance()),
       ]);
 
-      // 异步检测自动播放策略（有超时保护）
-      let autoplayAllowed = false;
-      try {
-        const autoplayPromise = detectAutoplayPolicy();
-        const timeoutPromise = new Promise<boolean>((resolve) => {
-          setTimeout(() => resolve(false), 100); // 缩短超时到 100ms
-        });
-        autoplayAllowed = await Promise.race([autoplayPromise, timeoutPromise]);
-      } catch (error) {
-        logger.warn('compatibility', '自动播放检测失败，假设不允许', error);
-        autoplayAllowed = false;
-      }
+      // 跳过自动播放检测以加快加载速度
+      // 自动播放策略将在实际播放时处理
+      const autoplayAllowed = false;
+      logger.info('compatibility', '跳过自动播放检测以加快加载');
 
       // 组装检测结果
       const result: BrowserCapabilities = {
