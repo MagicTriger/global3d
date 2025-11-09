@@ -1,392 +1,520 @@
 <template>
-  <div class="panorama-root relative w-full h-full overflow-hidden">
-    <!-- 预览层：避免白屏 -->
+  <div ref="rootRef" class="panorama-root relative w-full h-full overflow-hidden">
+    <!-- 加载状态 -->
     <div
-      v-if="!ready"
-      class="absolute inset-0 bg-black/80 flex items-center justify-center"
+      v-if="isLoading"
+      class="absolute inset-0 bg-black/80 flex flex-col items-center justify-center z-30"
     >
-      <div class="text-white/80 text-sm">正在准备资源...</div>
+      <div class="text-white/80 text-sm mb-2">{{ loadingMessage }}</div>
+      <div v-if="loadingProgress > 0" class="w-48 h-1 bg-gray-700 rounded-full overflow-hidden">
+        <div
+          class="h-full bg-blue-500 transition-all duration-300"
+          :style="{ width: `${loadingProgress}%` }"
+        ></div>
+      </div>
     </div>
 
-    <!-- iOS 手势遮罩 -->
-    <button
-      v-if="needsGesture"
-      class="absolute inset-0 z-20 flex items-center justify-center bg-black/60 hover:bg-black/50 transition-colors"
-      @click="startPlayback"
+    <!-- 缓冲状态 -->
+    <div
+      v-if="isBuffering && !isLoading"
+      class="absolute top-4 right-4 bg-black/70 text-white px-3 py-2 rounded text-sm z-20"
     >
-      <span class="px-4 py-2 rounded bg-primary text-white">点击播放</span>
+      缓冲中...
+    </div>
+
+    <!-- 播放按钮（需要用户手势时显示） -->
+    <button
+      v-if="showPlayButton"
+      class="absolute inset-0 z-20 flex items-center justify-center bg-black/60 hover:bg-black/50 transition-colors"
+      style="min-width: 44px; min-height: 44px"
+      @click="handlePlayClick"
+    >
+      <div class="play-button-icon">
+        <div class="play-triangle"></div>
+      </div>
     </button>
 
-    <!-- krpano 容器（WebGL） -->
-    <div v-show="mode === 'webgl'" :id="krpanoId" class="absolute inset-0"></div>
+    <!-- WebGL 渲染器容器 -->
+    <div
+      v-show="currentRendererType === 'webgl'"
+      ref="webglContainerRef"
+      class="absolute inset-0"
+    ></div>
 
-    <!-- three.js 球面渲染容器（无 krpano 时的真实全景） -->
-    <div v-show="mode === 'three'" ref="threeMount" class="absolute inset-0"></div>
+    <!-- CSS3D 渲染器容器 -->
+    <div
+      v-show="currentRendererType === 'css3d'"
+      ref="css3dContainerRef"
+      class="absolute inset-0"
+    ></div>
 
-    <!-- 视频容器（降级或混合模式） -->
+    <!-- Fallback 渲染器容器 -->
+    <div
+      v-show="currentRendererType === 'fallback'"
+      ref="fallbackContainerRef"
+      class="absolute inset-0"
+    ></div>
+
+    <!-- 视频元素（隐藏，用作纹理源） -->
     <video
-      v-show="mode === 'video' || mode === 'three'"
       ref="videoRef"
-      :class="mode === 'three' ? 'absolute w-px h-px opacity-0 -z-10 pointer-events-none' : 'absolute inset-0 w-full h-full object-contain bg-black'"
+      class="absolute w-px h-px opacity-0 -z-10 pointer-events-none"
       :poster="poster"
-      playsinline
-      webkit-playsinline
-      x5-playsinline
-      x5-video-player-type="h5-page"
-      x5-video-player-fullscreen="false"
-      autoplay
-      loop
-      preload="metadata"
-      muted
     ></video>
 
-    <!-- CSS3D 简易全景占位（WebGL 不可用时） -->
+    <!-- 错误提示 -->
     <div
-      v-if="mode === 'css3d'"
-      class="absolute inset-0"
-      :style="css3dStyle"
-      @pointerdown="onPointerDown"
-      @pointermove="onPointerMove"
-      @pointerup="onPointerUp"
-      @pointerleave="onPointerUp"
-    ></div>
+      v-if="errorMessage"
+      class="absolute inset-0 bg-black/90 flex flex-col items-center justify-center z-40 text-white p-4"
+    >
+      <div class="text-red-400 mb-4">{{ errorMessage }}</div>
+      <button
+        v-if="canRetry"
+        class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded transition-colors"
+        @click="handleRetry"
+      >
+        重试
+      </button>
+    </div>
+
+    <!-- 降级提示 -->
+    <div
+      v-if="showDegradationNotice"
+      class="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-yellow-600/90 text-white px-4 py-2 rounded text-sm z-10"
+    >
+      {{ degradationMessage }}
+    </div>
   </div>
 </template>
 
 <script lang="ts" setup>
 import { onMounted, onBeforeUnmount, ref, computed } from 'vue';
-import Hls from 'hls.js';
-import { isIOS, isWebGLAvailable, isHlsSupported } from '../utils/env';
-import { loadKrpano, embedKrpano } from '../utils/krpano';
-import * as THREE from 'three';
-// @ts-expect-error - examples typings are bundled with three
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import type { VideoSource } from '../types/panorama';
+import { useCompatibility } from '../composables/useCompatibility';
+import { useRenderer } from '../composables/useRenderer';
+import { useVideoLoader } from '../composables/useVideoLoader';
+import { useInteraction } from '../composables/useInteraction';
+import logger from '../utils/logger';
+import memoryMonitor from '../utils/memoryMonitor';
 
+// Props 定义
 interface Props {
   poster?: string;
-  hlsSrc?: string; // HLS m3u8 地址
-  lowSrc?: string; // 低清晰度 HLS 地址（可选）
-  highSrc?: string; // 高清晰度 HLS 地址（可选）
-  krpanoXml?: string; // krpano xml 配置（可选）
-  initialYawDeg?: number; // 初始左右视角（度）
-  initialPitchDeg?: number; // 初始上下视角（度，向下为正）
-  initialFov?: number; // 初始视场（默认 75）
-  enableKeyboard?: boolean; // 启用键盘控制（默认开启）
+  hlsSrc?: string;
+  lowSrc?: string;
+  highSrc?: string;
+  mp4Src?: string;
+  webmSrc?: string;
+  initialYawDeg?: number;
+  initialPitchDeg?: number;
+  initialFov?: number;
+  autoplay?: boolean;
+  muted?: boolean;
+  loop?: boolean;
 }
 
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), {
+  poster: '',
+  hlsSrc: '',
+  lowSrc: '',
+  highSrc: '',
+  mp4Src: '',
+  webmSrc: '',
+  initialYawDeg: 0,
+  initialPitchDeg: 0,
+  initialFov: 75,
+  autoplay: true,
+  muted: true,
+  loop: true,
+});
 
-const ready = ref(false);
-const needsGesture = ref(false);
-const mode = ref<'webgl' | 'three' | 'css3d' | 'video'>('video');
-const isPlaying = ref(false);
+// 定义事件
+const emit = defineEmits<{
+  ready: [];
+  loading: [progress: number];
+  error: [message: string];
+}>();
+
+// 使用 Composables
+const compatibility = useCompatibility();
+const rendererManager = useRenderer();
+const videoLoader = useVideoLoader();
+const interaction = useInteraction();
+
+// 模板引用
+const rootRef = ref<HTMLElement | null>(null);
 const videoRef = ref<HTMLVideoElement | null>(null);
-const krpanoId = `krpano-${Math.random().toString(36).slice(2)}`;
-const threeMount = ref<HTMLDivElement | null>(null);
+const webglContainerRef = ref<HTMLElement | null>(null);
+const css3dContainerRef = ref<HTMLElement | null>(null);
+const fallbackContainerRef = ref<HTMLElement | null>(null);
 
-// three.js 实例
-let renderer: THREE.WebGLRenderer | null = null;
-let scene: THREE.Scene | null = null;
-let camera: THREE.PerspectiveCamera | null = null;
-let controls: any = null;
-let animationId = 0;
-let videoTexture: THREE.VideoTexture | null = null;
-let keydownHandler: ((e: KeyboardEvent) => void) | null = null;
+// 组件状态
+const isLoading = ref(true);
+const loadingMessage = ref('正在初始化...');
+const errorMessage = ref<string | null>(null);
+const canRetry = ref(false);
+const showDegradationNotice = ref(false);
+const degradationMessage = ref('');
+const isBuffering = ref(false);
+const loadingProgress = ref(0);
 
-const deg2rad = (d: number) => (d * Math.PI) / 180;
+// 计算属性
+const showPlayButton = computed(() => interaction.showPlayButton.value);
+const currentRendererType = computed(() => rendererManager.currentType.value);
 
-// CSS3D 占位交互
-const dragging = ref(false);
-const startX = ref(0);
-const rotate = ref(0);
-const css3dStyle = computed(() => ({
-  backgroundImage: props.poster ? `url(${props.poster})` : 'none',
-  backgroundSize: 'cover',
-  transform: `translateZ(0) rotateY(${rotate.value}deg)`,
-}));
+// 清理函数引用
+let loopCleanup: (() => void) | undefined;
 
-function onPointerDown(e: PointerEvent) {
-  dragging.value = true;
-  startX.value = e.clientX;
+/**
+ * 构建视频源列表
+ */
+function buildVideoSources(): VideoSource[] {
+  const sources: VideoSource[] = [];
+
+  // HLS 源
+  if (props.hlsSrc) {
+    sources.push({ url: props.hlsSrc, type: 'hls', quality: 'medium' });
+  }
+  if (props.lowSrc) {
+    sources.push({ url: props.lowSrc, type: 'hls', quality: 'low' });
+  }
+  if (props.highSrc) {
+    sources.push({ url: props.highSrc, type: 'hls', quality: 'high' });
+  }
+
+  // MP4 源
+  if (props.mp4Src) {
+    sources.push({ url: props.mp4Src, type: 'mp4', quality: 'medium' });
+  }
+
+  // WebM 源
+  if (props.webmSrc) {
+    sources.push({ url: props.webmSrc, type: 'webm', quality: 'medium' });
+  }
+
+  return sources;
 }
-function onPointerMove(e: PointerEvent) {
-  if (!dragging.value) return;
-  const dx = e.clientX - startX.value;
-  rotate.value = Math.max(-45, Math.min(45, dx * 0.1));
-}
-function onPointerUp() {
-  dragging.value = false;
+
+/**
+ * 处理播放按钮点击
+ */
+async function handlePlayClick() {
+  if (!videoRef.value) return;
+
+  try {
+    await interaction.handlePlayButtonClick(videoRef.value);
+  } catch (error) {
+    logger.error('interaction', '播放按钮点击处理失败', error);
+    errorMessage.value = '无法播放视频';
+  }
 }
 
-async function setupKrpanoOrFallback() {
-  if (props.krpanoXml && isWebGLAvailable()) {
-    try {
-      await loadKrpano();
-      await embedKrpano({ target: `#${krpanoId}`, xml: props.krpanoXml });
-      mode.value = 'webgl';
-      ready.value = true;
-      // krpano 场景就绪，通知加载完成
-      window.dispatchEvent(new CustomEvent('panorama:loaded', { detail: { mode: 'webgl' } }));
-      return;
-    } catch (e) {
-      console.warn('krpano 加载失败，使用视频模式作为降级', e);
+/**
+ * 处理重试
+ */
+async function handleRetry() {
+  errorMessage.value = null;
+  canRetry.value = false;
+  await initializePlayer();
+}
+
+/**
+ * 初始化播放器
+ * 这是 subtask 11.2 的主要实现
+ * 优化：使用 requestIdleCallback 延迟非关键初始化
+ */
+async function initializePlayer() {
+  try {
+    logger.info('renderer', '开始初始化全景播放器');
+    isLoading.value = true;
+    loadingMessage.value = '正在检测浏览器能力...';
+
+    // 步骤 1: 执行兼容性检测（关键路径）
+    const capabilities = await compatibility.detectCapabilities();
+    logger.info('compatibility', '兼容性检测完成', capabilities);
+
+    // 步骤 2: 根据检测结果选择渲染器（关键路径）
+    loadingMessage.value = '正在选择渲染器...';
+    const selectedRendererType = compatibility.selectRenderer(capabilities);
+    logger.info('renderer', `选择的渲染器: ${selectedRendererType}`);
+
+    // 显示降级提示
+    if (selectedRendererType === 'css3d') {
+      showDegradationNotice.value = true;
+      degradationMessage.value = '您的浏览器不支持 WebGL，使用简化渲染模式';
+    } else if (selectedRendererType === 'fallback') {
+      showDegradationNotice.value = true;
+      degradationMessage.value = '您的浏览器功能受限，使用基础显示模式';
     }
-  }
-  // 无 krpano：若 WebGL 可用则使用 three.js 实现真实球面渲染，否则使用 CSS3D 或视频
-  if (isWebGLAvailable()) {
-    mode.value = 'three';
-    // three 模式下也需要视频源作为纹理
-    await setupVideo();
-    await setupThree();
-    // three 模式在视频真正开始播放后再标记 ready，避免黑屏
-  } else {
-    // WebGL 不可用：优先 CSS3D 占位，否则视频保底
-    mode.value = 'css3d';
-    ready.value = true;
-  }
-}
 
-function tryAutoplay(v: HTMLVideoElement) {
-  return v.play().catch(() => {
-    needsGesture.value = isIOS();
-  });
-}
+    // 步骤 3: 获取渲染器容器
+    let container: HTMLElement | null = null;
+    if (selectedRendererType === 'webgl') {
+      container = webglContainerRef.value;
+    } else if (selectedRendererType === 'css3d') {
+      container = css3dContainerRef.value;
+    } else if (selectedRendererType === 'fallback') {
+      container = fallbackContainerRef.value;
+    }
 
-async function setupVideo() {
-  const v = videoRef.value!;
-  if (!v) return;
-  // 确保循环播放
-  v.loop = true;
-  // 移动端内联播放与跨域纹理
-  v.muted = true;
-  v.setAttribute('muted', '');
-  v.playsInline = true as any;
-  v.setAttribute('playsinline', '');
-  try { (v as any).webkitPlaysInline = true; } catch {}
-  v.crossOrigin = 'anonymous';
+    if (!container) {
+      throw new Error('渲染器容器未找到');
+    }
 
-  const source = props.hlsSrc || props.lowSrc || props.highSrc || '';
-  if (!source) return;
-
-  const isM3u8 = /\.m3u8($|\?)/i.test(source) || source.includes('m3u8');
-
-  if (isM3u8 && isHlsSupported()) {
-    const hls = new Hls({ maxBufferLength: 10, startPosition: -1 });
-    hls.loadSource(source);
-    hls.attachMedia(v);
-    hls.on(Hls.Events.MANIFEST_PARSED, () => {
-      tryAutoplay(v);
+    // 步骤 4: 初始化选定的渲染器
+    loadingMessage.value = '正在初始化渲染器...';
+    const rendererInitSuccess = await rendererManager.initRenderer({
+      type: selectedRendererType,
+      container,
+      videoElement: videoRef.value!,
+      initialView: {
+        yaw: props.initialYawDeg,
+        pitch: props.initialPitchDeg,
+        fov: props.initialFov,
+      },
     });
-    // 渐进式：若有高码率源，稳定后切换
-    if (props.highSrc && props.lowSrc && props.hlsSrc === undefined) {
-      setTimeout(() => {
-        hls.loadSource(props.highSrc!);
-      }, 5000);
-    }
-  } else if (isM3u8 && v.canPlayType('application/vnd.apple.mpegurl')) {
-    v.src = source;
-    v.addEventListener('loadedmetadata', () => tryAutoplay(v));
-  } else {
-    // 普通视频源（如 mp4）
-    v.src = source;
-    v.addEventListener('loadedmetadata', () => tryAutoplay(v));
-  }
 
-  // 播放开始后，如果是 three 模式则初始化视频纹理
-  v.addEventListener('playing', () => {
-    isPlaying.value = true;
-    if (mode.value === 'three' && renderer && scene && camera) {
-      if (!videoTexture) {
-        videoTexture = new THREE.VideoTexture(v);
-        videoTexture.colorSpace = THREE.SRGBColorSpace;
-        videoTexture.minFilter = THREE.LinearFilter;
-        videoTexture.magFilter = THREE.LinearFilter;
+    if (!rendererInitSuccess) {
+      throw new Error('渲染器初始化失败');
+    }
+
+    logger.info('renderer', '渲染器初始化成功');
+
+    // 步骤 5: 加载视频资源
+    loadingMessage.value = '正在加载视频...';
+    const videoSources = buildVideoSources();
+
+    if (videoSources.length === 0) {
+      throw new Error('未提供视频源');
+    }
+
+    await videoLoader.loadVideo({
+      sources: videoSources,
+      videoElement: videoRef.value!,
+      autoplay: props.autoplay,
+      muted: props.muted,
+      loop: props.loop,
+    });
+
+    logger.info('video', '视频加载成功');
+
+    // 步骤 6: 设置循环播放
+    if (props.loop && videoRef.value) {
+      loopCleanup = videoLoader.setupLoopPlayback(videoRef.value);
+    }
+
+    // 步骤 7: 处理自动播放策略
+    if (props.autoplay && videoRef.value) {
+      loadingMessage.value = '正在启动播放...';
+      const autoplaySuccess = await interaction.tryAutoplay(videoRef.value);
+
+      if (!autoplaySuccess) {
+        logger.info('interaction', '自动播放失败，显示播放按钮');
+        // 播放按钮已由 interaction.tryAutoplay 自动显示
+      } else {
+        logger.info('interaction', '自动播放成功');
       }
     }
-    // 视频开始播放（three/video），通知加载完成
-    ready.value = true;
-    window.dispatchEvent(new CustomEvent('panorama:loaded', { detail: { mode: mode.value } }));
-  });
 
-  // 兜底：某些环境下 loop 可能不生效，ended 时手动重启
-  v.addEventListener('ended', () => {
-    v.currentTime = 0;
-    v.play().catch(() => {
-      // iOS 等环境可能需要手势重新触发
-      needsGesture.value = isIOS();
-    });
-  });
-
-  // 自动播放失败兜底：短暂等待后仍未开始播放则提示手势
-  setTimeout(() => {
-    if (!isPlaying.value) {
-      needsGesture.value = true;
+    // 步骤 8: 启用触摸控制（如果有渲染器）
+    if (rendererManager.currentRenderer.value && rootRef.value) {
+      interaction.enableTouchControls(rootRef.value, rendererManager.currentRenderer.value);
+      logger.info('interaction', '触摸控制已启用');
     }
-  }, 1500);
 
-  // 视频错误降级：切换到 CSS3D 占位，避免黑屏
-  v.addEventListener('error', () => {
-    if (mode.value !== 'css3d') {
-      mode.value = 'css3d';
-      ready.value = true;
-      window.dispatchEvent(new CustomEvent('panorama:loaded', { detail: { mode: 'css3d' } }));
+    // 步骤 9: 监听视频播放事件，隐藏加载状态
+    if (videoRef.value) {
+      const video = videoRef.value;
+
+      // 标记是否已经通知渲染器
+      let videoReadyNotified = false;
+
+      // canplay 事件 - 视频可以开始播放（快速启动）
+      const handleCanPlay = () => {
+        // 在 canplay 时就通知渲染器创建纹理，提前显示内容
+        if (!videoReadyNotified && rendererManager.currentRenderer.value && videoRef.value) {
+          rendererManager.currentRenderer.value.onVideoReady(videoRef.value);
+          videoReadyNotified = true;
+          logger.info('renderer', '已通知渲染器视频准备就绪（canplay）');
+        }
+
+        isBuffering.value = false;
+        logger.info('video', '视频可以播放');
+      };
+
+      // 播放事件 - 视频开始播放
+      const handlePlaying = () => {
+        isLoading.value = false;
+        isBuffering.value = false;
+        loadingMessage.value = '';
+        logger.info('video', '视频开始播放，初始化完成');
+
+        // 如果之前没有通知渲染器，现在通知
+        if (!videoReadyNotified && rendererManager.currentRenderer.value && videoRef.value) {
+          rendererManager.currentRenderer.value.onVideoReady(videoRef.value);
+          videoReadyNotified = true;
+          logger.info('renderer', '已通知渲染器视频准备就绪（playing）');
+        }
+
+        // 通知外部组件
+        window.dispatchEvent(
+          new CustomEvent('panorama:loaded', {
+            detail: {
+              rendererType: selectedRendererType,
+              capabilities,
+            },
+          })
+        );
+
+        // 发射 ready 事件
+        emit('ready');
+      };
+
+      // 缓冲事件
+      const handleWaiting = () => {
+        isBuffering.value = true;
+        logger.info('video', '视频缓冲中');
+      };
+
+      // 进度事件
+      const handleProgress = () => {
+        if (video.buffered.length > 0) {
+          const bufferedEnd = video.buffered.end(video.buffered.length - 1);
+          const duration = video.duration;
+          if (duration > 0) {
+            const progress = Math.round((bufferedEnd / duration) * 100);
+            loadingProgress.value = progress;
+            // 发射 loading 事件
+            emit('loading', progress);
+          }
+        }
+      };
+
+      // 错误事件
+      const handleError = () => {
+        const error = video.error;
+        const errorMsg = error
+          ? `视频加载失败: ${error.message} (code: ${error.code})`
+          : '视频加载失败';
+        logger.error('video', errorMsg);
+        isLoading.value = false;
+        isBuffering.value = false;
+        errorMessage.value = errorMsg;
+        canRetry.value = true;
+        // 发射 error 事件
+        emit('error', errorMsg);
+      };
+
+      video.addEventListener('playing', handlePlaying, { once: true });
+      video.addEventListener('waiting', handleWaiting);
+      video.addEventListener('canplay', handleCanPlay);
+      video.addEventListener('progress', handleProgress);
+      video.addEventListener('error', handleError);
     }
-  });
-}
 
-function startPlayback() {
-  const v = videoRef.value;
-  if (!v) return;
-  v.play().finally(() => (needsGesture.value = false));
-}
-
-async function setupThree() {
-  if (!threeMount.value) return;
-  const mount = threeMount.value;
-
-  // 初始化 renderer
-  renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.setSize(mount.clientWidth, mount.clientHeight);
-  mount.appendChild(renderer.domElement);
-
-  // 场景与相机
-  scene = new THREE.Scene();
-  camera = new THREE.PerspectiveCamera(75, mount.clientWidth / mount.clientHeight, 0.1, 1100);
-  camera.position.set(0, 0, 0.1);
-
-  // 使用视频纹理包裹内表面
-  const geometry = new THREE.SphereGeometry(500, 64, 64);
-  geometry.scale(-1, 1, 1); // 翻转法线，观察球内侧
-
-  // 先用占位材质，视频播放后替换纹理
-  const material = new THREE.MeshBasicMaterial({ color: 0x101010 });
-  const mesh = new THREE.Mesh(geometry, material);
-  scene.add(mesh);
-
-  // 控制器
-  controls = new OrbitControls(camera, renderer.domElement);
-  controls.enableZoom = true;
-  controls.enablePan = false;
-  controls.rotateSpeed = 0.3;
-  controls.zoomSpeed = 0.5;
-  controls.minDistance = 0.1;
-  controls.maxDistance = 2;
-
-  // 初始视角与视场
-  const yaw = deg2rad(props.initialYawDeg ?? 0);
-  const pitch = deg2rad(props.initialPitchDeg ?? 0);
-  setAngles(getAngles().yaw + yaw, getAngles().polar + pitch);
-  if (props.initialFov && camera) {
-    camera.fov = props.initialFov;
-    camera.updateProjectionMatrix();
-  }
-
-  // 当视频纹理就绪时，替换材质
-  const tryBindTexture = () => {
-    if (videoTexture) {
-      const texMat = new THREE.MeshBasicMaterial({ map: videoTexture });
-      mesh.material = texMat;
+    // 如果不自动播放，也要隐藏加载状态
+    if (!props.autoplay) {
+      isLoading.value = false;
+      loadingMessage.value = '';
     }
-  };
 
-  const animate = () => {
-    animationId = requestAnimationFrame(animate);
-    controls.update();
-    tryBindTexture();
-    renderer!.render(scene!, camera!);
-  };
-  animate();
-
-  // 响应尺寸变化
-  const onResize = () => {
-    if (!renderer || !camera) return;
-    const w = mount.clientWidth;
-    const h = mount.clientHeight;
-    renderer.setSize(w, h);
-    camera.aspect = w / h;
-    camera.updateProjectionMatrix();
-  };
-  window.addEventListener('resize', onResize);
-
-  // 键盘控制（箭头调整视角，+/- 调整视场）
-  if (props.enableKeyboard !== false) {
-    keydownHandler = (e: KeyboardEvent) => {
-      const step = 0.03; // 约 1.7°
-      const { yaw, polar } = getAngles();
-      if (e.key === 'ArrowLeft') setAngles(yaw + step, polar);
-      else if (e.key === 'ArrowRight') setAngles(yaw - step, polar);
-      else if (e.key === 'ArrowUp') setAngles(yaw, polar + step);
-      else if (e.key === 'ArrowDown') setAngles(yaw, polar - step);
-      else if (e.key === '+' || e.key === '=') {
-        camera.fov = Math.max(30, camera.fov - 2);
-        camera.updateProjectionMatrix();
-      } else if (e.key === '-' || e.key === '_') {
-        camera.fov = Math.min(100, camera.fov + 2);
-        camera.updateProjectionMatrix();
-      }
-    };
-    window.addEventListener('keydown', keydownHandler);
+    logger.info('renderer', '全景播放器初始化完成');
+  } catch (error) {
+    logger.error('renderer', '全景播放器初始化失败', error);
+    isLoading.value = false;
+    const errorMsg = error instanceof Error ? error.message : '初始化失败，请刷新页面重试';
+    errorMessage.value = errorMsg;
+    canRetry.value = true;
+    // 发射 error 事件
+    emit('error', errorMsg);
   }
-
-  // 清理函数
-  onBeforeUnmount(() => {
-    window.removeEventListener('resize', onResize);
-    if (keydownHandler) window.removeEventListener('keydown', keydownHandler);
-    if (animationId) cancelAnimationFrame(animationId);
-    controls && controls.dispose && controls.dispose();
-    renderer && renderer.dispose();
-    videoTexture && videoTexture.dispose();
-    renderer = null;
-    scene = null;
-    camera = null;
-    controls = null;
-    videoTexture = null;
-  });
 }
 
-// 对外暴露视角控制 API
-function getAngles() {
-  if (controls?.getAzimuthalAngle && controls?.getPolarAngle) {
-    return { yaw: controls.getAzimuthalAngle(), polar: controls.getPolarAngle() };
-  }
-  // 计算当前相机相对于目标的方位角与极角
-  const target = controls?.target ?? new THREE.Vector3(0, 0, 0);
-  const offset = new THREE.Vector3().copy(camera!.position).sub(target);
-  const yaw = Math.atan2(offset.x, offset.z);
-  const polar = Math.atan2(Math.sqrt(offset.x * offset.x + offset.z * offset.z), offset.y);
-  return { yaw, polar };
-}
-
-function setAngles(yaw: number, polar: number) {
-  if (!camera || !controls) return;
-  const target = controls.target ?? new THREE.Vector3(0, 0, 0);
-  const r = camera.position.distanceTo(target);
-  const x = r * Math.sin(polar) * Math.sin(yaw);
-  const y = r * Math.cos(polar);
-  const z = r * Math.sin(polar) * Math.cos(yaw);
-  camera.position.set(x, y, z);
-  camera.lookAt(target);
-  controls.update();
-}
-
-function setView(yawDeg: number, pitchDeg: number) {
-  const targetYaw = deg2rad(yawDeg);
-  const targetPolar = deg2rad(90 - pitchDeg); // pitch: 0=水平，+向下
-  setAngles(targetYaw, targetPolar);
-}
-
-function panBy(deltaYawDeg: number, deltaPitchDeg: number) {
-  const { yaw, polar } = getAngles();
-  setAngles(yaw + deg2rad(deltaYawDeg), polar + deg2rad(deltaPitchDeg));
-}
-
-defineExpose({ setView, panBy });
+// 对外暴露 API
+defineExpose({
+  setView: (yawDeg: number, pitchDeg: number) => {
+    if (rendererManager.currentRenderer.value) {
+      rendererManager.currentRenderer.value.setView(yawDeg, pitchDeg);
+    }
+  },
+  panBy: (deltaYawDeg: number, deltaPitchDeg: number) => {
+    if (rendererManager.currentRenderer.value) {
+      rendererManager.currentRenderer.value.panBy(deltaYawDeg, deltaPitchDeg);
+    }
+  },
+});
 
 onMounted(async () => {
-  await setupKrpanoOrFallback();
-  if (mode.value === 'video') {
-    await setupVideo();
+  // 启动内存监控
+  memoryMonitor.startMonitoring(10000); // 每 10 秒检查一次
+  memoryMonitor.setLowMemoryCallback(() => {
+    logger.warn('memory', '检测到内存不足，尝试降级视频质量');
+    // 如果当前不是低质量，尝试切换到低质量
+    if (videoLoader.currentQuality.value !== 'low') {
+      videoLoader.switchQuality('low').catch((error) => {
+        logger.error('memory', '降级视频质量失败', error);
+      });
+    }
+  });
+
+  await initializePlayer();
+});
+
+onBeforeUnmount(() => {
+  logger.info('renderer', '开始清理全景播放器资源');
+
+  try {
+    // 0. 停止内存监控
+    memoryMonitor.stopMonitoring();
+    logger.info('memory', '内存监控已停止');
+
+    // 1. 禁用触摸控制
+    if (rootRef.value) {
+      interaction.disableTouchControls(rootRef.value);
+      logger.info('interaction', '触摸控制已禁用');
+    }
+
+    // 2. 销毁渲染器（及时释放纹理和几何体）
+    if (rendererManager.currentRenderer.value) {
+      rendererManager.dispose();
+      logger.info('renderer', '渲染器已销毁');
+    }
+
+    // 3. 清理视频资源
+    if (videoRef.value) {
+      // 停止播放
+      videoRef.value.pause();
+      videoRef.value.src = '';
+      videoRef.value.load();
+      logger.info('video', '视频资源已清理');
+    }
+
+    // 4. 清理视频加载器
+    videoLoader.dispose();
+    logger.info('video', '视频加载器已清理');
+
+    // 5. 清理循环播放监听器
+    if (loopCleanup) {
+      loopCleanup();
+      loopCleanup = undefined;
+      logger.info('video', '循环播放监听器已清理');
+    }
+
+    // 6. 移除事件监听器
+    if (videoRef.value) {
+      // 移除所有可能的事件监听器
+      const events = ['playing', 'ended', 'error', 'loadedmetadata', 'canplay'];
+      events.forEach((event) => {
+        videoRef.value?.removeEventListener(event, () => {});
+      });
+    }
+
+    // 7. 记录最终内存状态
+    memoryMonitor.logMemoryInfo();
+
+    logger.info('renderer', '全景播放器资源清理完成');
+  } catch (error) {
+    logger.error('renderer', '清理资源时发生错误', error);
   }
 });
 </script>
@@ -397,8 +525,31 @@ onMounted(async () => {
   -ms-touch-action: none;
   overscroll-behavior: contain;
 }
-.panorama-root canvas,
-.panorama-root div {
-  user-select: none;
+
+.play-button-icon {
+  width: 80px;
+  height: 80px;
+  background-color: rgba(0, 0, 0, 0.7);
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+}
+
+.play-button-icon:hover {
+  background-color: rgba(0, 0, 0, 0.9);
+  transform: scale(1.1);
+  border-color: rgba(255, 255, 255, 1);
+}
+
+.play-triangle {
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 15px 0 15px 25px;
+  border-color: transparent transparent transparent rgba(255, 255, 255, 0.9);
+  margin-left: 5px;
 }
 </style>
