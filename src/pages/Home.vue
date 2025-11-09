@@ -35,10 +35,8 @@ import PanoramaPlayer from '../components/PanoramaPlayer.vue';
 import LoadingScreen from './LoadingScreen.vue';
 import DebugPanel from '../components/DebugPanel.vue';
 
-// 显示调试面板（开发环境或URL参数包含debug=true）
-const showDebug = ref(
-  import.meta.env.DEV || new URLSearchParams(window.location.search).has('debug')
-);
+// 显示调试面板（始终显示，方便手机端调试）
+const showDebug = ref(true);
 
 const BASE = import.meta.env.BASE_URL;
 

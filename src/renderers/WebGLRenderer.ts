@@ -62,9 +62,16 @@ export class WebGLRenderer implements Renderer {
       // 将渲染器添加到容器
       this.container.appendChild(this.renderer.domElement);
 
-      // 创建内翻球体几何体（降低分段数以优化移动端性能）
-      const geometry = new THREE.SphereGeometry(500, 32, 32);
+      // 创建内翻球体几何体（根据设备性能调整分段数）
+      // 移动端使用更低的分段数以提升性能
+      const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+        navigator.userAgent
+      );
+      const segments = isMobileDevice ? 24 : 32; // 移动端24段，桌面32段
+      const geometry = new THREE.SphereGeometry(500, segments, segments);
       geometry.scale(-1, 1, 1); // 内翻球体
+
+      logger.info('renderer', `球体分段数: ${segments} (${isMobileDevice ? '移动端' : '桌面端'})`);
 
       // 创建初始材质（占位颜色）
       const material = new THREE.MeshBasicMaterial({

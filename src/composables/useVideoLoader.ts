@@ -78,18 +78,17 @@ export function useVideoLoader() {
     video.setAttribute('x5-video-orientation', 'portraint'); // 竖屏模式
 
     // 预加载策略 - 移动端优化
-    // 在移动端或低性能设备上只加载元数据，减少初始加载时间
-    // 在高性能设备上可以预加载部分数据
+    // 移动端统一使用 metadata，避免过度缓冲导致卡顿
     const devicePerf = assessDevicePerformance();
-    if (isMobile() || devicePerf.performanceScore === 'low') {
-      video.preload = 'metadata'; // 只加载元数据
-      logger.info('video', '移动端/低性能设备：使用 metadata 预加载策略');
+    if (isMobile()) {
+      video.preload = 'metadata'; // 移动端只加载元数据
+      logger.info('video', '移动端：使用 metadata 预加载策略');
     } else if (devicePerf.performanceScore === 'high') {
-      video.preload = 'auto'; // 高性能设备可以预加载
+      video.preload = 'auto'; // 高性能桌面设备可以预加载
       logger.info('video', '高性能设备：使用 auto 预加载策略');
     } else {
       video.preload = 'metadata'; // 默认使用 metadata
-      logger.info('video', '中等性能设备：使用 metadata 预加载策略');
+      logger.info('video', '标准设备：使用 metadata 预加载策略');
     }
 
     // 跨域设置
