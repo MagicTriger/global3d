@@ -1,7 +1,10 @@
 <template>
-  <section>
+  <section
+    class="relative w-full"
+    style="height: calc(100vh - var(--header-h, 56px)); min-height: 400px"
+  >
     <PanoramaPlayer
-      class="player w-full bg-black"
+      class="player w-full h-full bg-black"
       :poster="poster"
       :low-src="lowQualityVideo"
       :mp4-src="mediumQualityVideo"
@@ -22,6 +25,7 @@
       :error="loadingError"
       @retry="handleRetry"
     />
+    <DebugPanel v-if="showDebug" />
   </section>
 </template>
 
@@ -29,6 +33,12 @@
 import { ref, onMounted, onUnmounted } from 'vue';
 import PanoramaPlayer from '../components/PanoramaPlayer.vue';
 import LoadingScreen from './LoadingScreen.vue';
+import DebugPanel from '../components/DebugPanel.vue';
+
+// 显示调试面板（开发环境或URL参数包含debug=true）
+const showDebug = ref(
+  import.meta.env.DEV || new URLSearchParams(window.location.search).has('debug')
+);
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -52,10 +62,12 @@ const loadingError = ref('');
  * 处理全景播放器就绪事件
  */
 const handlePanoramaReady = () => {
+  console.log('[Home] 全景播放器就绪');
   loadingProgress.value = 100;
   loadingError.value = '';
   // 快速隐藏加载屏幕，提供更流畅的体验
   setTimeout(() => {
+    console.log('[Home] 隐藏加载屏幕');
     loadingVisible.value = false;
   }, 150); // 缩短延迟时间
 };
@@ -97,6 +109,12 @@ const onPanoramaLoaded = () => {
 };
 
 onMounted(() => {
+  console.log('[Home] 组件已挂载，加载状态:', {
+    loadingVisible: loadingVisible.value,
+    loadingProgress: loadingProgress.value,
+    BASE,
+    videoPath: lowQualityVideo,
+  });
   window.addEventListener('panorama:loaded', onPanoramaLoaded);
 });
 
@@ -106,12 +124,5 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.player {
-  height: calc(100vh - var(--header-h, 56px));
-}
-@supports (height: 100svh) {
-  .player {
-    height: calc(100svh - var(--header-h, 56px));
-  }
-}
+/* 样式已移至模板的 inline style 和 class */
 </style>

@@ -1,6 +1,9 @@
 <template>
   <div class="min-h-screen bg-black text-white">
-    <header ref="headerEl" class="flex items-center justify-between px-4 py-3 border-b border-white/10">
+    <header
+      ref="headerEl"
+      class="flex items-center justify-between px-4 py-3 border-b border-white/10"
+    >
       <div class="flex items-center gap-2">
         <img :src="BASE + 'vite.svg'" alt="logo" class="w-6 h-6" />
       </div>
@@ -8,11 +11,10 @@
         <RouterLink class="hover:text-primary" to="/">首页</RouterLink>
       </nav>
     </header>
-    <main class="p-0 sm:p-4">
+    <main>
       <RouterView />
     </main>
   </div>
-  
 </template>
 
 <script setup lang="ts">
