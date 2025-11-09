@@ -326,16 +326,56 @@ async function initializePlayer() {
     if (videoRef.value) {
       const video = videoRef.value;
 
-      // 标记是否已经通知渲染器
+      // 标记是否已经通知渲染器和发射 ready 事件
       let videoReadyNotified = false;
+      let readyEventEmitted = false;
 
-      // canplay 事件 - 视频可以开始播放（快速启动）
+      // loadeddata 事件 - 视频首帧数据加载完成（最早可显示内容）
+      const handleLoadedData = () => {
+        // 在 loadeddata 时就通知渲染器创建纹理，最早显示内容
+        if (!videoReadyNotified && rendererManager.currentRenderer.value && videoRef.value) {
+          rendererManager.currentRenderer.value.onVideoReady(videoRef.value);
+          videoReadyNotified = true;
+          logger.info('renderer', '已通知渲染器视频准备就绪（loadeddata）');
+        }
+
+        // 立即隐藏加载状态，显示视频内容
+        if (!readyEventEmitted) {
+          isLoading.value = false;
+          loadingMessage.value = '';
+
+          // 通知外部组件
+          window.dispatchEvent(
+            new CustomEvent('panorama:loaded', {
+              detail: {
+                rendererType: selectedRendererType,
+                capabilities,
+              },
+            })
+          );
+
+          // 发射 ready 事件
+          emit('ready');
+          readyEventEmitted = true;
+          logger.info('video', '视频数据加载完成，提前显示内容');
+        }
+      };
+
+      // canplay 事件 - 视频可以开始播放
       const handleCanPlay = () => {
-        // 在 canplay 时就通知渲染器创建纹理，提前显示内容
+        // 确保渲染器已通知
         if (!videoReadyNotified && rendererManager.currentRenderer.value && videoRef.value) {
           rendererManager.currentRenderer.value.onVideoReady(videoRef.value);
           videoReadyNotified = true;
           logger.info('renderer', '已通知渲染器视频准备就绪（canplay）');
+        }
+
+        // 确保 ready 事件已发射
+        if (!readyEventEmitted) {
+          isLoading.value = false;
+          loadingMessage.value = '';
+          emit('ready');
+          readyEventEmitted = true;
         }
 
         isBuffering.value = false;
@@ -347,27 +387,28 @@ async function initializePlayer() {
         isLoading.value = false;
         isBuffering.value = false;
         loadingMessage.value = '';
-        logger.info('video', '视频开始播放，初始化完成');
+        logger.info('video', '视频开始播放');
 
-        // 如果之前没有通知渲染器，现在通知
+        // 确保渲染器已通知（兜底）
         if (!videoReadyNotified && rendererManager.currentRenderer.value && videoRef.value) {
           rendererManager.currentRenderer.value.onVideoReady(videoRef.value);
           videoReadyNotified = true;
           logger.info('renderer', '已通知渲染器视频准备就绪（playing）');
         }
 
-        // 通知外部组件
-        window.dispatchEvent(
-          new CustomEvent('panorama:loaded', {
-            detail: {
-              rendererType: selectedRendererType,
-              capabilities,
-            },
-          })
-        );
-
-        // 发射 ready 事件
-        emit('ready');
+        // 确保 ready 事件已发射（兜底）
+        if (!readyEventEmitted) {
+          window.dispatchEvent(
+            new CustomEvent('panorama:loaded', {
+              detail: {
+                rendererType: selectedRendererType,
+                capabilities,
+              },
+            })
+          );
+          emit('ready');
+          readyEventEmitted = true;
+        }
       };
 
       // 缓冲事件
@@ -405,9 +446,10 @@ async function initializePlayer() {
         emit('error', errorMsg);
       };
 
-      video.addEventListener('playing', handlePlaying, { once: true });
-      video.addEventListener('waiting', handleWaiting);
+      video.addEventListener('loadeddata', handleLoadedData, { once: true });
       video.addEventListener('canplay', handleCanPlay);
+      video.addEventListener('playing', handlePlaying);
+      video.addEventListener('waiting', handleWaiting);
       video.addEventListener('progress', handleProgress);
       video.addEventListener('error', handleError);
     }

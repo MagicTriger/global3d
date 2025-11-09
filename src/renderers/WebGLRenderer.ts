@@ -453,15 +453,15 @@ export class WebGLRenderer implements Renderer {
 
   /**
    * 视频准备就绪回调
-   * 在视频开始播放后创建视频纹理
+   * 在视频可以播放时立即创建视频纹理（优化加载速度）
    */
   onVideoReady(video: HTMLVideoElement): void {
     if (!this.mesh || this.videoTexture) return;
 
     logger.info('renderer', 'Setting up video texture');
 
-    // 监听视频 playing 事件，确保视频开始播放后才创建纹理
-    const onPlaying = () => {
+    // 立即创建视频纹理的函数
+    const createTexture = () => {
       if (this.videoTexture || !this.mesh) return;
 
       try {
@@ -494,20 +494,23 @@ export class WebGLRenderer implements Renderer {
         }
 
         logger.info('renderer', 'Video texture created and applied successfully');
-
-        // 移除事件监听器
-        video.removeEventListener('playing', onPlaying);
       } catch (error) {
         logger.error('renderer', 'Failed to create video texture', error);
-        video.removeEventListener('playing', onPlaying);
       }
     };
 
-    // 检查视频是否已经在播放
-    if (!video.paused && video.readyState >= 2) {
-      onPlaying();
+    // 检查视频状态，尽早创建纹理
+    // readyState >= 2 表示 HAVE_CURRENT_DATA，视频已有当前帧数据
+    if (video.readyState >= 2) {
+      // 视频已经有数据，立即创建纹理
+      createTexture();
     } else {
-      video.addEventListener('playing', onPlaying);
+      // 等待 loadeddata 事件（比 playing 更早触发）
+      const onLoadedData = () => {
+        createTexture();
+        video.removeEventListener('loadeddata', onLoadedData);
+      };
+      video.addEventListener('loadeddata', onLoadedData);
     }
   }
 }
