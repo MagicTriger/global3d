@@ -330,8 +330,38 @@ async function initializePlayer() {
       let videoReadyNotified = false;
       let readyEventEmitted = false;
 
+      // 设置超时机制：如果1秒内没有触发事件，强制显示内容
+      const forceShowTimeout = setTimeout(() => {
+        if (!readyEventEmitted && rendererManager.currentRenderer.value && videoRef.value) {
+          logger.info('video', '超时触发：强制显示内容（1秒）');
+
+          // 通知渲染器
+          if (!videoReadyNotified) {
+            rendererManager.currentRenderer.value.onVideoReady(videoRef.value);
+            videoReadyNotified = true;
+          }
+
+          // 隐藏加载状态
+          isLoading.value = false;
+          loadingMessage.value = '';
+
+          // 发射 ready 事件
+          window.dispatchEvent(
+            new CustomEvent('panorama:loaded', {
+              detail: {
+                rendererType: selectedRendererType,
+                capabilities,
+              },
+            })
+          );
+          emit('ready');
+          readyEventEmitted = true;
+        }
+      }, 1000); // 1秒超时
+
       // loadeddata 事件 - 视频首帧数据加载完成（最早可显示内容）
       const handleLoadedData = () => {
+        clearTimeout(forceShowTimeout);
         // 在 loadeddata 时就通知渲染器创建纹理，最早显示内容
         if (!videoReadyNotified && rendererManager.currentRenderer.value && videoRef.value) {
           rendererManager.currentRenderer.value.onVideoReady(videoRef.value);
@@ -363,6 +393,8 @@ async function initializePlayer() {
 
       // canplay 事件 - 视频可以开始播放
       const handleCanPlay = () => {
+        clearTimeout(forceShowTimeout);
+
         // 确保渲染器已通知
         if (!videoReadyNotified && rendererManager.currentRenderer.value && videoRef.value) {
           rendererManager.currentRenderer.value.onVideoReady(videoRef.value);
@@ -374,6 +406,15 @@ async function initializePlayer() {
         if (!readyEventEmitted) {
           isLoading.value = false;
           loadingMessage.value = '';
+
+          window.dispatchEvent(
+            new CustomEvent('panorama:loaded', {
+              detail: {
+                rendererType: selectedRendererType,
+                capabilities,
+              },
+            })
+          );
           emit('ready');
           readyEventEmitted = true;
         }
@@ -384,6 +425,8 @@ async function initializePlayer() {
 
       // 播放事件 - 视频开始播放
       const handlePlaying = () => {
+        clearTimeout(forceShowTimeout);
+
         isLoading.value = false;
         isBuffering.value = false;
         loadingMessage.value = '';
