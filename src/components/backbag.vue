@@ -4,26 +4,15 @@
       <!-- 顶部标题区域 -->
       <div class="header-area">
         <!-- 背包标题 - 八卦图标和文字 -->
-        <img 
-          src="/images/backbag/组 1(3).png" 
-          alt="背包标题" 
-          class="backbag-header"
-        >
-        </img>
-        
+        <img src="/images/backbag/组 1(3).png" alt="背包标题" class="backbag-header" />
+
         <!-- 法物流通按钮 - 叠加在标题右侧 -->
         <div class="trade-button-wrapper">
-          <img 
-            src="/images/backbag/组 1(2).png" 
-            alt="法物流通" 
-            class="trade-button"
-          />
+          <img src="/images/backbag/组 1(2).png" alt="法物流通" class="trade-button" />
           <span class="trade-button-text">法物流通></span>
         </div>
       </div>
-      
-      
-      
+
       <!-- 背包内容区域 -->
       <div class="backbag-content">
         <!-- 背包物品网格 - 4列5行 -->
@@ -33,40 +22,24 @@
           </div>
         </div>
       </div>
-      
+
       <!-- 底部对齐容器 - 确保底部装饰和香图标顶部对齐 -->
       <div class="bottom-aligned-container">
         <!-- 底部装饰图片 -->
-        <img 
-          src="/images/backbag/底.png" 
-          alt="底部装饰" 
-          class="bottom-decoration"
-        />
-        
+        <img src="/images/backbag/底.png" alt="底部装饰" class="bottom-decoration" />
+
         <!-- 香图标 - 右下角 -->
-        <img 
-          src="/images/backbag/生成游戏图标 (7).png" 
-          alt="香" 
-          class="incense-icon"
-        />
+        <img src="/images/backbag/生成游戏图标 (7).png" alt="香" class="incense-icon" />
       </div>
-      
+
       <!-- 底部左侧控制区域 - 图层5副本2 + 返回按钮组 -->
       <div class="bottom-left-controls">
         <!-- 图层5副本2 -->
-        <img 
-          src="/images/backbag/图层 5 副本 2.png" 
-          alt="图层5装饰" 
-          class="layer5-decoration"
-        />
-        
+        <img src="/images/backbag/图层 5 副本 2.png" alt="图层5装饰" class="layer5-decoration" />
+
         <!-- 返回按钮组 - 图层2 + 文字 -->
         <div class="back-button-group" @click="$emit('close')">
-          <img 
-            src="/images/backbag/图层 2.png" 
-            alt="返回按钮" 
-            class="back-button-icon"
-          />
+          <img src="/images/backbag/图层 2.png" alt="返回按钮" class="back-button-icon" />
           <span class="back-button-text">返回</span>
         </div>
       </div>
@@ -77,7 +50,7 @@
 <script setup lang="ts">
 // 定义事件
 defineEmits<{
-  close: []
+  close: [];
 }>();
 
 // 点击遮罩层关闭
@@ -85,7 +58,6 @@ const handleOverlayClick = () => {
   // 可以选择是否允许点击遮罩层关闭
   // emit('close');
 };
-
 </script>
 
 <style scoped>
@@ -150,7 +122,7 @@ const handleOverlayClick = () => {
 
 /* 背包标题 - 八卦图标和文字 */
 .backbag-header {
-    transform: translateY(50%);
+  transform: translateY(50%);
   width: 100%;
   height: auto;
   object-fit: contain;
@@ -345,21 +317,21 @@ const handleOverlayClick = () => {
     width: 85%;
     max-width: 400px;
   }
-  
+
   .backbag-content {
     padding: 100px 20px 25vh; /* 增加底部padding避免被遮挡 */
   }
-  
+
   .backbag-grid {
     max-width: 90%;
     gap: 25px;
     padding: 20px;
   }
-  
+
   .grid-slot {
     border-width: 1.5px;
   }
-  
+
   .close-btn {
     top: 15px;
     right: 15px;
@@ -367,7 +339,7 @@ const handleOverlayClick = () => {
     height: 36px;
     font-size: 20px;
   }
-  
+
   /* 移动端底部对齐容器 */
   .bottom-aligned-container {
     height: 20vh;
@@ -380,17 +352,17 @@ const handleOverlayClick = () => {
     width: 90%;
     max-width: 350px;
   }
-  
+
   .backbag-content {
     padding: 90px 15px 22vh; /* 增加底部padding避免被遮挡 */
   }
-  
+
   .backbag-grid {
     max-width: 95%;
     gap: 15px;
     padding: 10px;
   }
-  
+
   .grid-slot {
     border-width: 1px;
   }
@@ -398,17 +370,17 @@ const handleOverlayClick = () => {
   .bottom-aligned-container {
     height: 18vh;
   }
-}/* 横屏适配 */
+} /* 横屏适配 */
 @media (orientation: landscape) and (max-height: 600px) {
   .header-area {
     top: 1vh;
     max-width: 450px;
   }
-  
+
   .backbag-content {
     padding: 80px 30px 35vh; /* 增加底部padding避免被遮挡 */
   }
-  
+
   .bottom-aligned-container {
     height: 30vh;
   }
@@ -420,25 +392,25 @@ const handleOverlayClick = () => {
     top: 3vh;
     max-width: 550px;
   }
-  
+
   .backbag-content {
     padding: 140px 50px 25vh; /* 增加底部padding避免被遮挡 */
   }
-  
+
   .backbag-grid {
     max-width: 700px;
     gap: 30px;
     padding: 25px;
   }
-  
+
   .grid-slot {
     border-width: 2.5px;
   }
-  
+
   .bottom-aligned-container {
     height: 22vh;
   }
-  
+
   /* 大屏幕时返回容器位置调整 */
   .bottom-left-controls {
     bottom: 12vh;
@@ -451,25 +423,25 @@ const handleOverlayClick = () => {
     top: 2.5vh;
     max-width: 480px;
   }
-  
+
   .backbag-content {
     padding: 110px 35px 28vh; /* 增加底部padding避免被遮挡 */
   }
-  
+
   .backbag-grid {
     max-width: 550px;
     gap: 25px;
     padding: 20px;
   }
-  
+
   .grid-slot {
     border-width: 2px;
   }
-  
+
   .bottom-aligned-container {
     height: 25vh;
   }
-  
+
   .bottom-left-controls {
     bottom: 18vh;
   }
@@ -486,7 +458,9 @@ const handleOverlayClick = () => {
   object-fit: contain;
   object-position: center; /* 居中对齐，让图片填满整个高度 */
   cursor: pointer;
-  transition: opacity 0.3s, transform 0.3s;
+  transition:
+    opacity 0.3s,
+    transform 0.3s;
   pointer-events: auto;
 }
 
@@ -499,5 +473,4 @@ const handleOverlayClick = () => {
   opacity: 0.6;
   transform: scale(0.95);
 }
-  
 </style>
