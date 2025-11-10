@@ -51,8 +51,37 @@ export function useVideoLoader() {
   const RETRY_DELAYS = [1000, 2000, 4000]; // 1s, 2s, 4s
 
   /**
+   * 等待微信 JS 桥接初始化
+   * 微信浏览器需要等待 WeixinJSBridge 初始化完成才能正常加载视频
+   */
+  function waitForWeixinJSBridge(): Promise<void> {
+    return new Promise((resolve) => {
+      if (typeof (window as any).WeixinJSBridge !== 'undefined') {
+        logger.info('video', '微信 JS 桥接已就绪');
+        resolve();
+      } else {
+        logger.info('video', '等待微信 JS 桥接初始化...');
+        document.addEventListener(
+          'WeixinJSBridgeReady',
+          () => {
+            logger.info('video', '微信 JS 桥接初始化完成');
+            resolve();
+          },
+          { once: true }
+        );
+        
+        // 超时保护：3秒后强制继续
+        setTimeout(() => {
+          logger.warn('video', '微信 JS 桥接等待超时，强制继续');
+          resolve();
+        }, 3000);
+      }
+    });
+  }
+
+  /**
    * 设置视频元素属性（移动端兼容性）
-   * 优化 iOS 和 Android 兼容性
+   * 优化 iOS、Android 和微信兼容性
    */
   function setupVideoAttributes(video: HTMLVideoElement, cfg: VideoLoaderConfig): void {
     // 基本属性
@@ -76,11 +105,31 @@ export function useVideoLoader() {
     video.setAttribute('x5-video-player-type', 'h5-page');
     video.setAttribute('x5-video-player-fullscreen', 'false');
     video.setAttribute('x5-video-orientation', 'portraint'); // 竖屏模式
-
-    // 取消预加载策略 - 使用 none 以最快速度显示页面
-    // 视频将在用户交互或自动播放时才开始加载
-    video.preload = 'none';
-    logger.info('video', '使用 none 预加载策略，按需加载视频');
+    
+    // 微信浏览器特殊处理
+    const isWechatBrowser = /MicroMessenger/i.test(navigator.userAgent);
+    if (isWechatBrowser) {
+      // 微信浏览器必须使用 metadata 预加载，auto 会导致卡住
+      video.preload = 'metadata';
+      logger.info('video', '微信浏览器：使用 metadata 预加载策略');
+      
+      // 微信浏览器需要显式设置这些属性
+      video.setAttribute('webkit-playsinline', 'true');
+      video.setAttribute('x5-playsinline', 'true');
+      video.setAttribute('playsinline', 'true');
+      
+      // 确保静音（微信要求）
+      video.muted = true;
+      video.defaultMuted = true;
+    } else if (isIOS()) {
+      // iOS 优化：使用 metadata 预加载策略，提前加载视频元数据和首帧
+      video.preload = 'metadata';
+      logger.info('video', 'iOS 设备：使用 metadata 预加载策略');
+    } else {
+      // Android 非微信：自动预加载，更快的体验
+      video.preload = 'auto';
+      logger.info('video', 'Android 设备：使用 auto 预加载策略');
+    }
 
     // 跨域设置
     video.crossOrigin = 'anonymous';
@@ -383,8 +432,21 @@ export function useVideoLoader() {
     const video = cfg.videoElement;
 
     try {
+      // 微信浏览器：等待 WeixinJSBridge 初始化
+      const isWechatBrowser = /MicroMessenger/i.test(navigator.userAgent);
+      if (isWechatBrowser) {
+        logger.info('video', '检测到微信浏览器，等待 JS 桥接初始化');
+        await waitForWeixinJSBridge();
+      }
+
       // 设置视频元素属性
       setupVideoAttributes(video, cfg);
+
+      // 微信浏览器：需要先触发 load() 才能正常加载
+      if (isWechatBrowser) {
+        logger.info('video', '微信浏览器：触发视频 load()');
+        video.load();
+      }
 
       // 尝试加载视频（带重试）
       await retryLoad(video, state.currentQuality.value);

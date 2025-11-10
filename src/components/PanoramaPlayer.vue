@@ -225,6 +225,13 @@ async function handleRetry() {
  */
 async function initializePlayer() {
   try {
+    // 微信浏览器检测和日志
+    const isWechatBrowser = /MicroMessenger/i.test(navigator.userAgent);
+    if (isWechatBrowser) {
+      logger.info('renderer', '检测到微信浏览器环境');
+      console.log('[微信调试] 开始初始化全景播放器');
+    }
+    
     logger.info('renderer', '开始初始化全景播放器');
     isLoading.value = true;
     loadingMessage.value = '正在检测浏览器能力...';
@@ -232,6 +239,10 @@ async function initializePlayer() {
     // 步骤 1: 执行兼容性检测（关键路径）
     const capabilities = await compatibility.detectCapabilities();
     logger.info('compatibility', '兼容性检测完成', capabilities);
+    
+    if (isWechatBrowser) {
+      console.log('[微信调试] 兼容性检测完成:', capabilities);
+    }
 
     // 步骤 2: 根据检测结果选择渲染器（关键路径）
     loadingMessage.value = '正在选择渲染器...';
@@ -288,7 +299,8 @@ async function initializePlayer() {
       throw new Error('未提供视频源');
     }
 
-    await videoLoader.loadVideo({
+    // iOS 优化：并行加载视频和初始化渲染器，减少总加载时间
+    const videoLoadPromise = videoLoader.loadVideo({
       sources: videoSources,
       videoElement: videoRef.value!,
       autoplay: props.autoplay,
@@ -296,6 +308,8 @@ async function initializePlayer() {
       loop: props.loop,
     });
 
+    // 等待视频加载完成
+    await videoLoadPromise;
     logger.info('video', '视频加载成功');
 
     // 步骤 6: 设置循环播放
@@ -306,11 +320,29 @@ async function initializePlayer() {
     // 步骤 7: 处理自动播放策略
     if (props.autoplay && videoRef.value) {
       loadingMessage.value = '正在启动播放...';
+      
+      // iOS 优化：在尝试自动播放前，先加载视频数据
+      // 这样即使自动播放失败，视频也已经准备好，点击播放按钮会立即播放
+      if (videoRef.value.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) {
+        logger.info('video', 'iOS 优化：等待视频数据加载');
+        await new Promise<void>((resolve) => {
+          const video = videoRef.value!;
+          const onCanPlay = () => {
+            video.removeEventListener('canplay', onCanPlay);
+            resolve();
+          };
+          video.addEventListener('canplay', onCanPlay);
+          // 触发加载
+          video.load();
+        });
+      }
+      
       const autoplaySuccess = await interaction.tryAutoplay(videoRef.value);
 
       if (!autoplaySuccess) {
-        logger.info('interaction', '自动播放失败，显示播放按钮');
+        logger.info('interaction', '自动播放失败，显示播放按钮（视频已预加载）');
         // 播放按钮已由 interaction.tryAutoplay 自动显示
+        // 此时视频已经预加载，用户点击后会立即播放
       } else {
         logger.info('interaction', '自动播放成功');
       }
@@ -330,10 +362,16 @@ async function initializePlayer() {
       let videoReadyNotified = false;
       let readyEventEmitted = false;
 
-      // 设置超时机制：如果1秒内没有触发事件，强制显示内容
+      // 微信浏览器检测
+      const isWechatBrowser = /MicroMessenger/i.test(navigator.userAgent);
+      
+      // 微信浏览器需要更长的超时时间（3秒），因为加载较慢
+      const timeoutDuration = isWechatBrowser ? 3000 : 1000;
+      
+      // 设置超时机制：如果超时没有触发事件，强制显示内容
       const forceShowTimeout = setTimeout(() => {
         if (!readyEventEmitted && rendererManager.currentRenderer.value && videoRef.value) {
-          logger.info('video', '超时触发：强制显示内容（1秒）');
+          logger.info('video', `超时触发：强制显示内容（${timeoutDuration}ms）`);
 
           // 通知渲染器
           if (!videoReadyNotified) {
@@ -357,7 +395,7 @@ async function initializePlayer() {
           emit('ready');
           readyEventEmitted = true;
         }
-      }, 1000); // 1秒超时
+      }, timeoutDuration);
 
       // loadeddata 事件 - 视频首帧数据加载完成（最早可显示内容）
       const handleLoadedData = () => {
