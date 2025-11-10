@@ -117,12 +117,6 @@ const onPanoramaLoaded = () => {
 };
 
 onMounted(() => {
-  console.log('[Home] 组件已挂载，加载状态:', {
-    loadingVisible: loadingVisible.value,
-    loadingProgress: loadingProgress.value,
-    BASE,
-    videoPath: lowQualityVideo,
-  });
   window.addEventListener('panorama:loaded', onPanoramaLoaded);
 });
 

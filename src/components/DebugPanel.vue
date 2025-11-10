@@ -429,56 +429,73 @@ onMounted(() => {
   window.addEventListener('log:error' as any, handleErrorEvent);
   window.addEventListener('panorama:loaded' as any, handlePanoramaLoaded);
 
-  // 拦截 console.log 以捕获所有日志
-  const originalLog = console.log;
-  const originalError = console.error;
-  const originalWarn = console.warn;
-  
-  console.log = (...args: any[]) => {
-    originalLog.apply(console, args);
-    const message = args.map(arg => 
-      typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
-    ).join(' ');
+  // iOS 兼容性：使用 try-catch 包裹 console 拦截，避免崩溃
+  try {
+    const originalLog = console.log;
+    const originalError = console.error;
+    const originalWarn = console.warn;
     
-    // 提取分类（如果消息以 [分类] 开头）
-    const categoryMatch = message.match(/^\[([^\]]+)\]/);
-    const category = categoryMatch ? categoryMatch[1] : 'log';
-    const cleanMessage = categoryMatch ? message.replace(/^\[[^\]]+\]\s*/, '') : message;
+    console.log = (...args: any[]) => {
+      try {
+        originalLog.apply(console, args);
+        const message = args.map(arg => 
+          typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+        ).join(' ');
+        
+        const categoryMatch = message.match(/^\[([^\]]+)\]/);
+        const category = categoryMatch ? categoryMatch[1] : 'log';
+        const cleanMessage = categoryMatch ? message.replace(/^\[[^\]]+\]\s*/, '') : message;
+        
+        addLog('info', category, cleanMessage);
+      } catch (e) {
+        // 静默失败，不影响主应用
+        originalLog.apply(console, args);
+      }
+    };
     
-    addLog('info', category, cleanMessage);
-  };
-  
-  console.error = (...args: any[]) => {
-    originalError.apply(console, args);
-    const message = args.map(arg => 
-      typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
-    ).join(' ');
+    console.error = (...args: any[]) => {
+      try {
+        originalError.apply(console, args);
+        const message = args.map(arg => 
+          typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+        ).join(' ');
+        
+        const categoryMatch = message.match(/^\[([^\]]+)\]/);
+        const category = categoryMatch ? categoryMatch[1] : 'error';
+        const cleanMessage = categoryMatch ? message.replace(/^\[[^\]]+\]\s*/, '') : message;
+        
+        addLog('error', category, cleanMessage);
+        errors.value.push(cleanMessage);
+        if (errors.value.length > 10) {
+          errors.value.shift();
+        }
+      } catch (e) {
+        originalError.apply(console, args);
+      }
+    };
     
-    const categoryMatch = message.match(/^\[([^\]]+)\]/);
-    const category = categoryMatch ? categoryMatch[1] : 'error';
-    const cleanMessage = categoryMatch ? message.replace(/^\[[^\]]+\]\s*/, '') : message;
-    
-    addLog('error', category, cleanMessage);
-    errors.value.push(cleanMessage);
-    if (errors.value.length > 10) {
-      errors.value.shift();
-    }
-  };
-  
-  console.warn = (...args: any[]) => {
-    originalWarn.apply(console, args);
-    const message = args.map(arg => 
-      typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
-    ).join(' ');
-    
-    const categoryMatch = message.match(/^\[([^\]]+)\]/);
-    const category = categoryMatch ? categoryMatch[1] : 'warn';
-    const cleanMessage = categoryMatch ? message.replace(/^\[[^\]]+\]\s*/, '') : message;
-    
-    addLog('warn', category, cleanMessage);
-  };
+    console.warn = (...args: any[]) => {
+      try {
+        originalWarn.apply(console, args);
+        const message = args.map(arg => 
+          typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+        ).join(' ');
+        
+        const categoryMatch = message.match(/^\[([^\]]+)\]/);
+        const category = categoryMatch ? categoryMatch[1] : 'warn';
+        const cleanMessage = categoryMatch ? message.replace(/^\[[^\]]+\]\s*/, '') : message;
+        
+        addLog('warn', category, cleanMessage);
+      } catch (e) {
+        originalWarn.apply(console, args);
+      }
+    };
 
-  addLog('info', 'DebugPanel', '调试面板已启动');
+    addLog('info', 'DebugPanel', '调试面板已启动');
+  } catch (error) {
+    // console 拦截失败，不影响主应用
+    console.error('DebugPanel console 拦截失败:', error);
+  }
 });
 
 onUnmounted(() => {

@@ -653,7 +653,6 @@ onMounted(async () => {
   });
 
   // 自动初始化播放器
-  console.log('[组件] 开始自动初始化播放器');
   await initializePlayer();
 });
 

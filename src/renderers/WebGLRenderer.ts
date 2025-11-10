@@ -563,7 +563,7 @@ export class WebGLRenderer implements Renderer {
         this.videoTexture.colorSpace = THREE.SRGBColorSpace;
         this.videoTexture.minFilter = THREE.LinearFilter;
         this.videoTexture.magFilter = THREE.LinearFilter;
-        this.videoTexture.format = THREE.RGBFormat;
+        // RGBFormat 在新版本中已移除，不再需要设置
 
         // 将纹理应用到球体材质
         const material = new THREE.MeshBasicMaterial({
@@ -648,7 +648,7 @@ export class WebGLRenderer implements Renderer {
               this.videoTexture.colorSpace = THREE.SRGBColorSpace;
               this.videoTexture.minFilter = THREE.LinearFilter;
               this.videoTexture.magFilter = THREE.LinearFilter;
-              this.videoTexture.format = THREE.RGBFormat;
+              // RGBFormat 在新版本中已移除
 
               const material = new THREE.MeshBasicMaterial({
                 map: this.videoTexture,
