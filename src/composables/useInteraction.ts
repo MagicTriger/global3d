@@ -58,12 +58,6 @@ export function useInteraction() {
   async function handlePlayButtonClick(videoElement: HTMLVideoElement): Promise<void> {
     playButtonClicked.value = true;
     logger.info('interaction', '播放按钮被点击');
-    console.log('[交互管理器] 播放按钮点击，视频状态:', {
-      readyState: videoElement.readyState,
-      paused: videoElement.paused,
-      muted: videoElement.muted,
-      src: videoElement.src
-    });
 
     try {
       // 确保视频静音（iOS/微信要求）
@@ -72,11 +66,11 @@ export function useInteraction() {
       // 微信浏览器特殊处理
       const isWechatBrowser = /MicroMessenger/i.test(navigator.userAgent);
       if (isWechatBrowser) {
-        console.log('[交互管理器] 微信浏览器，使用特殊播放逻辑');
+        logger.info('interaction', '微信浏览器，使用特殊播放逻辑');
         
         // 微信需要先 load 再 play
         if (videoElement.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) {
-          console.log('[交互管理器] 微信：触发 load()');
+          logger.info('interaction', '微信：触发 load()');
           videoElement.load();
           
           // 等待一小段时间让视频准备
@@ -85,20 +79,18 @@ export function useInteraction() {
       }
       
       // 尝试播放视频
-      console.log('[交互管理器] 调用 video.play()');
+      logger.info('interaction', '调用 video.play()');
       const playPromise = videoElement.play();
       
       if (playPromise !== undefined) {
         await playPromise;
       }
       
-      console.log('[交互管理器] 视频播放成功');
       logger.info('interaction', '视频播放成功');
 
       // 播放成功后隐藏按钮
       hidePlayButton();
     } catch (error: any) {
-      console.error('[交互管理器] 播放失败:', error);
       logger.error('interaction', '播放按钮点击后视频播放失败', error);
       
       // 提供更详细的错误信息

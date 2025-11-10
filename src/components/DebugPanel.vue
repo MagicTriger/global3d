@@ -115,6 +115,28 @@
         </div>
       </div>
 
+      <!-- 实时日志 -->
+      <div class="debug-section">
+        <div class="debug-section-title">
+          📝 实时日志
+          <button class="debug-btn-small" @click="clearLogs">清除</button>
+        </div>
+        <div class="debug-logs">
+          <div
+            v-for="(log, index) in realtimeLogs"
+            :key="index"
+            :class="['debug-log-item', `log-${log.level}`]"
+          >
+            <span class="log-time">{{ log.time }}</span>
+            <span class="log-category">[{{ log.category }}]</span>
+            <span class="log-message">{{ log.message }}</span>
+          </div>
+          <div v-if="realtimeLogs.length === 0" class="debug-log-empty">
+            暂无日志
+          </div>
+        </div>
+      </div>
+
       <!-- 错误日志 -->
       <div v-if="errors.length > 0" class="debug-section">
         <div class="debug-section-title">❌ 错误日志</div>
@@ -185,9 +207,19 @@ const loadingTimes = reactive({
 });
 
 const errors = ref<string[]>([]);
+const realtimeLogs = ref<Array<{
+  time: string;
+  level: string;
+  category: string;
+  message: string;
+}>>([]);
+
 let fpsCounter = 0;
 let lastTime = window.performance.now();
 let fpsInterval: number | null = null;
+
+// 最多保留50条日志
+const MAX_LOGS = 50;
 
 const toggleExpanded = () => {
   expanded.value = !expanded.value;
@@ -246,8 +278,30 @@ const clearErrors = () => {
   errors.value = [];
 };
 
+const clearLogs = () => {
+  realtimeLogs.value = [];
+};
+
 const refresh = () => {
   window.location.reload();
+};
+
+// 添加日志到实时日志列表
+const addLog = (level: string, category: string, message: string) => {
+  const now = new Date();
+  const time = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+  
+  realtimeLogs.value.push({
+    time,
+    level,
+    category,
+    message
+  });
+  
+  // 限制日志数量
+  if (realtimeLogs.value.length > MAX_LOGS) {
+    realtimeLogs.value.shift();
+  }
 };
 
 const updateFPS = () => {
@@ -375,7 +429,56 @@ onMounted(() => {
   window.addEventListener('log:error' as any, handleErrorEvent);
   window.addEventListener('panorama:loaded' as any, handlePanoramaLoaded);
 
-  console.log('[DebugPanel] 调试面板已启动');
+  // 拦截 console.log 以捕获所有日志
+  const originalLog = console.log;
+  const originalError = console.error;
+  const originalWarn = console.warn;
+  
+  console.log = (...args: any[]) => {
+    originalLog.apply(console, args);
+    const message = args.map(arg => 
+      typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+    ).join(' ');
+    
+    // 提取分类（如果消息以 [分类] 开头）
+    const categoryMatch = message.match(/^\[([^\]]+)\]/);
+    const category = categoryMatch ? categoryMatch[1] : 'log';
+    const cleanMessage = categoryMatch ? message.replace(/^\[[^\]]+\]\s*/, '') : message;
+    
+    addLog('info', category, cleanMessage);
+  };
+  
+  console.error = (...args: any[]) => {
+    originalError.apply(console, args);
+    const message = args.map(arg => 
+      typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+    ).join(' ');
+    
+    const categoryMatch = message.match(/^\[([^\]]+)\]/);
+    const category = categoryMatch ? categoryMatch[1] : 'error';
+    const cleanMessage = categoryMatch ? message.replace(/^\[[^\]]+\]\s*/, '') : message;
+    
+    addLog('error', category, cleanMessage);
+    errors.value.push(cleanMessage);
+    if (errors.value.length > 10) {
+      errors.value.shift();
+    }
+  };
+  
+  console.warn = (...args: any[]) => {
+    originalWarn.apply(console, args);
+    const message = args.map(arg => 
+      typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+    ).join(' ');
+    
+    const categoryMatch = message.match(/^\[([^\]]+)\]/);
+    const category = categoryMatch ? categoryMatch[1] : 'warn';
+    const cleanMessage = categoryMatch ? message.replace(/^\[[^\]]+\]\s*/, '') : message;
+    
+    addLog('warn', category, cleanMessage);
+  };
+
+  addLog('info', 'DebugPanel', '调试面板已启动');
 });
 
 onUnmounted(() => {
@@ -547,6 +650,76 @@ onUnmounted(() => {
 
 .debug-btn:hover {
   background: rgba(255, 255, 255, 0.2);
+}
+
+.debug-btn-small {
+  padding: 2px 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  color: #fff;
+  font-size: 10px;
+  cursor: pointer;
+  margin-left: 8px;
+}
+
+.debug-btn-small:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.debug-logs {
+  max-height: 200px;
+  overflow-y: auto;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+  padding: 8px;
+  font-family: 'Courier New', monospace;
+}
+
+.debug-log-item {
+  padding: 4px 0;
+  font-size: 10px;
+  line-height: 1.4;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  word-break: break-word;
+}
+
+.debug-log-item:last-child {
+  border-bottom: none;
+}
+
+.log-time {
+  color: #888;
+  margin-right: 6px;
+}
+
+.log-category {
+  color: #60a5fa;
+  margin-right: 6px;
+  font-weight: 600;
+}
+
+.log-message {
+  color: #fff;
+}
+
+.log-info .log-message {
+  color: #fff;
+}
+
+.log-warn .log-message {
+  color: #f59e0b;
+}
+
+.log-error .log-message {
+  color: #ef4444;
+}
+
+.debug-log-empty {
+  text-align: center;
+  color: rgba(255, 255, 255, 0.5);
+  padding: 20px;
+  font-size: 11px;
 }
 
 .debug-fab {
