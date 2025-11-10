@@ -6,13 +6,13 @@ stages:
     name: compile
     displayName: 编译
     steps:
-      - step: build@script
-        name: build_script
-        displayName: 构建项目
-        # 使用 Node.js 20 的 Docker 镜像
-        image: node:20-alpine
+      - step: build@custom
+        name: build_custom
+        displayName: 自定义构建
+        # 使用 Node.js 20 镜像
+        image: node:20
         # 构建命令
-        script:
+        commands:
           - npm ci
           - npm run build
         # 构建产物
@@ -27,7 +27,7 @@ stages:
         dependArtifact: BUILD_ARTIFACT
         # 上传到制品库时的制品命名，默认output
         artifactName: output
-        dependsOn: build_script
+        dependsOn: build_custom
   - stage:
     name: release
     displayName: 发布
