@@ -26,6 +26,18 @@ export class WebGLRenderer implements Renderer {
   private resizeObserver: ResizeObserver | null = null;
   private orientationChangeHandler: (() => void) | null = null;
   private resizeTimeout: number | null = null;
+  
+  // 帧率限制相关
+  private lastFrameTime = 0;
+  private readonly targetFPS = 60;
+  private readonly frameInterval: number;
+  private frameCount = 0;
+  private fpsStartTime = 0;
+  private currentFPS = 0;
+
+  constructor() {
+    this.frameInterval = 1000 / this.targetFPS;
+  }
 
   /**
    * 初始化 WebGL 渲染器
@@ -73,14 +85,16 @@ export class WebGLRenderer implements Renderer {
 
       logger.info('renderer', `球体分段数: ${segments} (${isMobileDevice ? '移动端' : '桌面端'})`);
 
-      // 创建初始材质（占位颜色）
+      // 创建初始材质（占位颜色 - 深灰色而不是纯黑，避免与黑屏混淆）
       const material = new THREE.MeshBasicMaterial({
-        color: 0x000000, // 黑色占位
+        color: 0x1a1a1a, // 深灰色占位，表示正在加载
       });
 
       // 创建网格
       this.mesh = new THREE.Mesh(geometry, material);
       this.scene.add(this.mesh);
+
+      logger.info('renderer', '已创建占位材质（深灰色），等待视频纹理');
 
       // 设置初始视角
       this.setView(config.initialView.yaw, config.initialView.pitch);
@@ -260,24 +274,65 @@ export class WebGLRenderer implements Renderer {
   }
 
   /**
-   * 启动渲染循环
+   * 启动渲染循环（带帧率限制）
    */
   private startRenderLoop(): void {
-    const animate = () => {
+    this.lastFrameTime = performance.now();
+    this.fpsStartTime = this.lastFrameTime;
+    this.frameCount = 0;
+
+    const animate = (currentTime: number) => {
       if (this.isDisposed) return;
 
       this.animationFrameId = requestAnimationFrame(animate);
 
+      // 计算距离上一帧的时间
+      const deltaTime = currentTime - this.lastFrameTime;
+
+      // 帧率限制：如果距离上一帧时间小于目标帧间隔，跳过本帧
+      if (deltaTime < this.frameInterval) {
+        return;
+      }
+
+      // 更新上一帧时间（考虑余数以保持精确的帧率）
+      this.lastFrameTime = currentTime - (deltaTime % this.frameInterval);
+
+      // 更新控制器
       if (this.controls) {
         this.controls.update();
       }
 
+      // 确保视频纹理更新
+      if (this.videoTexture && this.videoElement) {
+        // 检查视频是否有新数据需要更新
+        if (this.videoElement.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+          this.videoTexture.needsUpdate = true;
+        }
+      }
+
+      // 渲染场景
       if (this.renderer && this.scene && this.camera) {
         this.renderer.render(this.scene, this.camera);
       }
+
+      // 计算实际 FPS（每秒更新一次）
+      this.frameCount++;
+      const fpsElapsed = currentTime - this.fpsStartTime;
+      if (fpsElapsed >= 1000) {
+        this.currentFPS = Math.round((this.frameCount * 1000) / fpsElapsed);
+        logger.info('renderer', `实际 FPS: ${this.currentFPS}`);
+        
+        // 如果 FPS 异常高，记录警告
+        if (this.currentFPS > 100) {
+          logger.warn('renderer', `检测到异常高的 FPS: ${this.currentFPS}，帧率限制可能未生效`);
+        }
+        
+        this.frameCount = 0;
+        this.fpsStartTime = currentTime;
+      }
     };
 
-    animate();
+    animate(this.lastFrameTime);
   }
 
   /**
@@ -460,18 +515,47 @@ export class WebGLRenderer implements Renderer {
 
   /**
    * 视频准备就绪回调
-   * 在视频可以播放时立即创建视频纹理（优化加载速度）
+   * 在视频可以播放时创建视频纹理，增强 readyState 检查
    */
   onVideoReady(video: HTMLVideoElement): void {
     if (!this.mesh || this.videoTexture) return;
 
     logger.info('renderer', 'Setting up video texture');
 
+    // 超时计时器引用
+    let textureTimeoutId: number | null = null;
+    let eventListenersAdded = false;
+
     // 立即创建视频纹理的函数
     const createTexture = () => {
+      // 清除超时计时器
+      if (textureTimeoutId !== null) {
+        clearTimeout(textureTimeoutId);
+        textureTimeoutId = null;
+      }
+
+      // 移除事件监听器
+      if (eventListenersAdded) {
+        video.removeEventListener('loadeddata', onLoadedData);
+        video.removeEventListener('canplay', onCanPlay);
+        video.removeEventListener('playing', onPlaying);
+        eventListenersAdded = false;
+      }
+
       if (this.videoTexture || !this.mesh) return;
 
+      // 严格检查 readyState
+      if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+        logger.warn(
+          'renderer',
+          `视频 readyState 不足 (${video.readyState})，延迟创建纹理`
+        );
+        return;
+      }
+
       try {
+        logger.info('renderer', `创建视频纹理 (readyState: ${video.readyState})`);
+
         // 创建视频纹理
         this.videoTexture = new THREE.VideoTexture(video);
 
@@ -500,24 +584,92 @@ export class WebGLRenderer implements Renderer {
           this.mesh.material = material;
         }
 
-        logger.info('renderer', 'Video texture created and applied successfully');
+        logger.info('renderer', '视频纹理创建并应用成功');
+
+        // 触发 panorama:loaded 事件
+        window.dispatchEvent(new CustomEvent('panorama:loaded'));
       } catch (error) {
-        logger.error('renderer', 'Failed to create video texture', error);
+        logger.error('renderer', '创建视频纹理失败', error);
       }
     };
 
-    // 检查视频状态，尽早创建纹理
-    // readyState >= 2 表示 HAVE_CURRENT_DATA，视频已有当前帧数据
-    if (video.readyState >= 2) {
+    // loadeddata 事件处理器
+    const onLoadedData = () => {
+      logger.info('renderer', `loadeddata 事件触发 (readyState: ${video.readyState})`);
+      createTexture();
+    };
+
+    // canplay 事件处理器
+    const onCanPlay = () => {
+      logger.info('renderer', `canplay 事件触发 (readyState: ${video.readyState})`);
+      createTexture();
+    };
+
+    // playing 事件处理器
+    const onPlaying = () => {
+      logger.info('renderer', `playing 事件触发 (readyState: ${video.readyState})`);
+      createTexture();
+    };
+
+    // 检查视频当前状态
+    if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
       // 视频已经有数据，立即创建纹理
+      logger.info('renderer', `视频已有数据 (readyState: ${video.readyState})，立即创建纹理`);
       createTexture();
     } else {
-      // 等待 loadeddata 事件（比 playing 更早触发）
-      const onLoadedData = () => {
-        createTexture();
-        video.removeEventListener('loadeddata', onLoadedData);
-      };
+      // 监听多个事件确保视频准备就绪
+      logger.info('renderer', `视频数据未准备好 (readyState: ${video.readyState})，等待事件`);
       video.addEventListener('loadeddata', onLoadedData);
+      video.addEventListener('canplay', onCanPlay);
+      video.addEventListener('playing', onPlaying);
+      eventListenersAdded = true;
+
+      // 设置超时机制：5 秒内未准备好则报错
+      textureTimeoutId = window.setTimeout(() => {
+        if (!this.videoTexture) {
+          logger.error(
+            'renderer',
+            `视频纹理创建超时 (5秒)，readyState: ${video.readyState}, paused: ${video.paused}, currentTime: ${video.currentTime}`
+          );
+
+          // 移除事件监听器
+          if (eventListenersAdded) {
+            video.removeEventListener('loadeddata', onLoadedData);
+            video.removeEventListener('canplay', onCanPlay);
+            video.removeEventListener('playing', onPlaying);
+            eventListenersAdded = false;
+          }
+
+          // 尝试强制创建纹理（即使 readyState 不足）
+          if (!this.videoTexture && this.mesh) {
+            logger.warn('renderer', '强制创建视频纹理');
+            try {
+              this.videoTexture = new THREE.VideoTexture(video);
+              this.videoTexture.colorSpace = THREE.SRGBColorSpace;
+              this.videoTexture.minFilter = THREE.LinearFilter;
+              this.videoTexture.magFilter = THREE.LinearFilter;
+              this.videoTexture.format = THREE.RGBFormat;
+
+              const material = new THREE.MeshBasicMaterial({
+                map: this.videoTexture,
+              });
+
+              if (this.mesh.material) {
+                if (Array.isArray(this.mesh.material)) {
+                  this.mesh.material.forEach((mat: THREE.Material) => mat.dispose());
+                } else {
+                  this.mesh.material.dispose();
+                }
+              }
+
+              this.mesh.material = material;
+              logger.info('renderer', '强制创建视频纹理成功');
+            } catch (error) {
+              logger.error('renderer', '强制创建视频纹理失败', error);
+            }
+          }
+        }
+      }, 5000);
     }
   }
 }

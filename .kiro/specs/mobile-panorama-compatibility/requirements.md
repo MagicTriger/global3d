@@ -99,3 +99,16 @@
 3. THE 全景播放器系统 SHALL 在竖屏和横屏模式下都能正常工作
 4. WHEN 浏览器窗口尺寸改变，THE 全景播放器系统 SHALL 实时更新渲染区域尺寸
 5. THE 全景播放器系统 SHALL 在高 DPI 屏幕上使用适当的像素比以保证清晰度
+
+### 需求 8
+
+**用户故事:** 作为移动端用户，我希望全景视频渲染器能够正确同步视频播放状态和渲染循环，避免因帧率异常或渲染时机问题导致黑屏，这样我可以在所有支持 WebGL 的浏览器中看到视频内容。
+
+#### 验收标准
+
+1. WHEN 视频元素未准备好，THE WebGL 渲染器 SHALL 延迟纹理创建直到视频 readyState 达到 HAVE_CURRENT_DATA 或更高
+2. WHEN 视频纹理创建后，THE WebGL 渲染器 SHALL 在每一帧检查视频是否有新数据需要更新
+3. IF 渲染循环帧率超过 100 FPS，THEN THE WebGL 渲染器 SHALL 限制帧率到 60 FPS 以避免性能问题
+4. WHEN 视频加载完成，THE 全景播放器系统 SHALL 触发 panorama:loaded 事件通知加载屏幕
+5. THE WebGL 渲染器 SHALL 在视频播放前显示占位内容而不是黑屏
+6. IF 视频纹理在 5 秒内未显示内容，THEN THE 全景播放器系统 SHALL 记录错误并尝试重新初始化渲染器

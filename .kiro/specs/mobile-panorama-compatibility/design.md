@@ -9,6 +9,8 @@
 3. **视频格式兼容性**: 不同浏览器对视频编码格式的支持不一致
 4. **Three.js 初始化失败**: 在低端设备或特定浏览器中 Three.js 可能无法正常初始化
 5. **视频纹理绑定时机**: 视频未开始播放时纹理为空导致黑屏
+6. **渲染循环同步问题**: 某些浏览器（如百度浏览器）中渲染循环帧率异常高（>100 FPS），但视频纹理未正确更新，导致黑屏且调试信息显示 0ms
+7. **视频 readyState 检查不足**: 未充分检查视频元素的 readyState，在视频数据未准备好时就创建纹理
 
 解决方案采用**渐进式降级策略**：WebGL (Three.js) → CSS3D → 静态图片，并增强移动端特定的兼容性处理。
 
@@ -178,16 +180,65 @@ interface RendererManager {
 **关键修复**:
 
 ```typescript
-// 问题：视频纹理在视频未播放时为黑色
-// 解决：延迟纹理绑定直到视频开始播放
+// 问题1：视频纹理在视频未播放时为黑色
+// 解决：延迟纹理绑定直到视频开始播放且有数据
 video.addEventListener('playing', () => {
-  if (!videoTexture) {
+  // 确保视频有数据可用（readyState >= 2）
+  if (!videoTexture && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
     videoTexture = new THREE.VideoTexture(video);
     videoTexture.colorSpace = THREE.SRGBColorSpace;
     mesh.material.map = videoTexture;
     mesh.material.needsUpdate = true;
+    
+    // 触发加载完成事件
+    window.dispatchEvent(new CustomEvent('panorama:loaded'));
   }
 });
+
+// 问题2：某些浏览器中帧率异常高但纹理不更新
+// 解决：限制帧率并确保纹理更新
+let lastFrameTime = 0;
+const targetFPS = 60;
+const frameInterval = 1000 / targetFPS;
+
+function animate(currentTime: number) {
+  requestAnimationFrame(animate);
+  
+  // 限制帧率
+  const deltaTime = currentTime - lastFrameTime;
+  if (deltaTime < frameInterval) {
+    return;
+  }
+  lastFrameTime = currentTime - (deltaTime % frameInterval);
+  
+  // 确保视频纹理更新
+  if (videoTexture && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+    videoTexture.needsUpdate = true;
+  }
+  
+  renderer.render(scene, camera);
+}
+
+// 问题3：视频数据未准备好时创建纹理
+// 解决：监听多个事件确保视频准备就绪
+const initVideoTexture = () => {
+  if (videoTexture || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+    return;
+  }
+  
+  videoTexture = new THREE.VideoTexture(video);
+  videoTexture.colorSpace = THREE.SRGBColorSpace;
+  videoTexture.minFilter = THREE.LinearFilter;
+  videoTexture.magFilter = THREE.LinearFilter;
+  mesh.material.map = videoTexture;
+  mesh.material.needsUpdate = true;
+  
+  window.dispatchEvent(new CustomEvent('panorama:loaded'));
+};
+
+video.addEventListener('playing', initVideoTexture);
+video.addEventListener('canplay', initVideoTexture);
+video.addEventListener('loadeddata', initVideoTexture);
 ```
 
 ### 4. CSS3DRenderer (CSS3D 渲染器)
