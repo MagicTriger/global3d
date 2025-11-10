@@ -1,7 +1,7 @@
 <template>
   <section
     class="relative w-full"
-    style="height: calc(100vh - var(--header-h, 56px)); min-height: 400px"
+    style="height: 100vh; min-height: 400px"
   >
     <PanoramaPlayer
       class="player w-full h-full bg-black"
@@ -27,6 +27,44 @@
     />
     <DebugPanel v-if="showDebug" @close="showDebug = false" />
 
+    <!-- 移动端资源图片 -->
+    <img 
+      v-if="!loadingVisible"
+      src="/images/home/mobile/组 1.png" 
+      alt="装饰图片" 
+      class="mobile-decoration"
+    />
+    
+    <!-- 移动端资源图片2 - 右上角位置，可点击切换 -->
+    <img 
+      v-if="!loadingVisible && showDecoration2"
+      src="/images/home/mobile/组 1(1).png" 
+      alt="装饰图片2" 
+      class="mobile-decoration-2 clickable"
+      @click="toggleDecoration"
+    />
+    
+    <!-- 移动端资源图片3 - 与图片2同位置，条件显示，可点击切换 -->
+    <img 
+      v-if="!loadingVisible && !showDecoration2"
+      src="/images/home/mobile/组 1 拷贝.png" 
+      alt="装饰图片3" 
+      class="mobile-decoration-2 clickable"
+      @click="toggleDecoration"
+    />
+    
+    <!-- 移动端资源图片4 - 背包按钮 -->
+    <img 
+      v-if="!loadingVisible"
+      src="/images/home/mobile/组 1(2).png" 
+      alt="背包按钮" 
+      class="mobile-decoration-4 clickable"
+      @click="openBackbag"
+    />
+    
+    <!-- 背包界面 -->
+    <Backbag v-if="showBackbag" @close="closeBackbag" />
+    
     <!-- 调试按钮 -->
     <button
       v-if="!showDebug && !loadingVisible"
@@ -42,11 +80,18 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
 import PanoramaPlayer from '../components/PanoramaPlayer.vue';
-import LoadingScreen from './LoadingScreen.vue';
+import LoadingScreen from '../components/LoadingScreen.vue';
 import DebugPanel from '../components/DebugPanel.vue';
+import Backbag from '../components/backbag.vue';
 
 // 显示调试面板（默认隐藏，点击图标打开）
 const showDebug = ref(false);
+
+// 控制右上角装饰图片的显示（true显示图片2，false显示图片3）
+const showDecoration2 = ref(true);
+
+// 控制背包界面显示
+const showBackbag = ref(false);
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -111,6 +156,27 @@ const handleRetry = () => {
   window.location.reload();
 };
 
+/**
+ * 切换右上角装饰图片显示
+ */
+const toggleDecoration = () => {
+  showDecoration2.value = !showDecoration2.value;
+};
+
+/**
+ * 打开背包界面
+ */
+const openBackbag = () => {
+  showBackbag.value = true;
+};
+
+/**
+ * 关闭背包界面
+ */
+const closeBackbag = () => {
+  showBackbag.value = false;
+};
+
 // 监听旧版全景加载完成事件（向后兼容）
 const onPanoramaLoaded = () => {
   handlePanoramaReady();
@@ -153,5 +219,72 @@ onUnmounted(() => {
 
 .debug-toggle-btn:active {
   transform: scale(0.95);
+}
+
+/* 移动端装饰图片 - 缩小一倍 */
+.mobile-decoration {
+  position: fixed;
+  left: 8.5px;
+  top: 14px;
+  z-index: 9997;
+  pointer-events: none;
+  object-fit: contain;
+  transform: scale(0.5);
+  transform-origin: top left;
+}
+
+/* 移动端装饰图片2和3 - 缩小一倍，右上角同位置 */
+.mobile-decoration-2 {
+  position: fixed;
+  top: 15px;
+  right: 10px;
+  z-index: 9997;
+  pointer-events: none;
+  object-fit: contain;
+  transform: scale(0.5);
+  transform-origin: top right;
+}
+
+/* 可点击的装饰图片 */
+.mobile-decoration-2.clickable {
+  pointer-events: auto;
+  cursor: pointer;
+  transition: opacity 0.3s;
+}
+
+.mobile-decoration-2.clickable:active {
+  opacity: 0.7;
+}
+
+/* 移动端装饰图片4 - 缩小一倍，右下角 */
+.mobile-decoration-4 {
+  position: fixed;
+  bottom: 21px;
+  right: 10px;
+  z-index: 9997;
+  pointer-events: none;
+  object-fit: contain;
+  transform: scale(0.5);
+  transform-origin: bottom right;
+}
+
+/* 可点击的背包按钮 */
+.mobile-decoration-4.clickable {
+  pointer-events: auto;
+  cursor: pointer;
+  transition: opacity 0.3s;
+}
+
+.mobile-decoration-4.clickable:active {
+  opacity: 0.7;
+}
+
+/* PC端隐藏移动端装饰图片 */
+@media (min-width: 431px) {
+  .mobile-decoration,
+  .mobile-decoration-2,
+  .mobile-decoration-4 {
+    display: none;
+  }
 }
 </style>
