@@ -1,8 +1,31 @@
 <template>
   <div ref="rootRef" class="panorama-root relative w-full h-full overflow-hidden">
+    <!-- 启动屏幕（用于绕过自动播放限制） -->
+    <div
+      v-if="showStartScreen"
+      class="absolute inset-0 bg-gradient-to-b from-gray-900 to-black flex flex-col items-center justify-center z-50"
+    >
+      <div class="text-center px-6">
+        <h2 class="text-white text-2xl font-bold mb-4">3D 全景视频</h2>
+        <p class="text-white/70 text-sm mb-8">点击下方按钮开始体验</p>
+        <button
+          class="start-experience-btn"
+          @click="handleStartExperience"
+        >
+          <div class="flex items-center gap-3">
+            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z"/>
+            </svg>
+            <span class="text-lg font-semibold">开始体验</span>
+          </div>
+        </button>
+        <p class="text-white/50 text-xs mt-6">支持触摸拖拽旋转视角</p>
+      </div>
+    </div>
+    
     <!-- 加载状态 -->
     <div
-      v-if="isLoading"
+      v-if="isLoading && !showStartScreen"
       class="absolute inset-0 bg-black/80 flex flex-col items-center justify-center z-30"
     >
       <div class="text-white/80 text-sm mb-2">{{ loadingMessage }}</div>
@@ -149,7 +172,8 @@ const css3dContainerRef = ref<HTMLElement | null>(null);
 const fallbackContainerRef = ref<HTMLElement | null>(null);
 
 // 组件状态
-const isLoading = ref(true);
+const showStartScreen = ref(true); // 启动屏幕（用于绕过自动播放限制）
+const isLoading = ref(false); // 初始不加载，等用户点击开始
 const loadingMessage = ref('正在初始化...');
 const errorMessage = ref<string | null>(null);
 const canRetry = ref(false);
@@ -199,14 +223,96 @@ function buildVideoSources(): VideoSource[] {
  * 处理播放按钮点击
  */
 async function handlePlayClick() {
-  if (!videoRef.value) return;
+  console.log('[播放按钮] 点击事件触发');
+  logger.info('interaction', '播放按钮被点击');
+  
+  if (!videoRef.value) {
+    console.error('[播放按钮] 视频元素不存在');
+    logger.error('interaction', '视频元素不存在');
+    return;
+  }
+
+  const video = videoRef.value;
+  console.log('[播放按钮] 视频状态:', {
+    readyState: video.readyState,
+    paused: video.paused,
+    src: video.src,
+    currentTime: video.currentTime,
+    duration: video.duration
+  });
 
   try {
-    await interaction.handlePlayButtonClick(videoRef.value);
+    // 确保视频已加载
+    if (!video.src) {
+      console.error('[播放按钮] 视频源未设置');
+      logger.error('interaction', '视频源未设置');
+      errorMessage.value = '视频源未加载，请刷新页面重试';
+      return;
+    }
+
+    // 如果视频未准备好，先加载
+    if (video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) {
+      console.log('[播放按钮] 视频未准备好，触发加载');
+      loadingMessage.value = '正在加载视频...';
+      isLoading.value = true;
+      video.load();
+      
+      // 等待视频准备好
+      await new Promise<void>((resolve, reject) => {
+        const onCanPlay = () => {
+          console.log('[播放按钮] 视频已准备好');
+          video.removeEventListener('canplay', onCanPlay);
+          video.removeEventListener('error', onError);
+          resolve();
+        };
+        
+        const onError = () => {
+          console.error('[播放按钮] 视频加载失败');
+          video.removeEventListener('canplay', onCanPlay);
+          video.removeEventListener('error', onError);
+          reject(new Error('视频加载失败'));
+        };
+        
+        video.addEventListener('canplay', onCanPlay, { once: true });
+        video.addEventListener('error', onError, { once: true });
+        
+        // 5秒超时
+        setTimeout(() => {
+          video.removeEventListener('canplay', onCanPlay);
+          video.removeEventListener('error', onError);
+          reject(new Error('视频加载超时'));
+        }, 5000);
+      });
+      
+      isLoading.value = false;
+    }
+
+    console.log('[播放按钮] 尝试播放视频');
+    await interaction.handlePlayButtonClick(video);
+    console.log('[播放按钮] 播放成功');
+    
   } catch (error) {
+    console.error('[播放按钮] 播放失败:', error);
     logger.error('interaction', '播放按钮点击处理失败', error);
-    errorMessage.value = '无法播放视频';
+    isLoading.value = false;
+    errorMessage.value = error instanceof Error ? error.message : '无法播放视频，请刷新页面重试';
+    canRetry.value = true;
   }
+}
+
+/**
+ * 处理开始体验按钮点击
+ * 这是绕过自动播放限制的关键 - 用户主动点击后，所有浏览器都允许播放
+ */
+async function handleStartExperience() {
+  console.log('[启动屏幕] 用户点击开始体验');
+  logger.info('interaction', '用户点击开始体验按钮');
+  
+  // 隐藏启动屏幕
+  showStartScreen.value = false;
+  
+  // 开始初始化播放器
+  await initializePlayer();
 }
 
 /**
@@ -568,6 +674,8 @@ defineExpose({
 });
 
 onMounted(async () => {
+  console.log('[组件] 已挂载，显示启动屏幕');
+  
   // 启动内存监控
   memoryMonitor.startMonitoring(10000); // 每 10 秒检查一次
   memoryMonitor.setLowMemoryCallback(() => {
@@ -580,7 +688,9 @@ onMounted(async () => {
     }
   });
 
-  await initializePlayer();
+  // 不再自动初始化，等待用户点击"开始体验"按钮
+  // 这样可以绕过所有浏览器的自动播放限制
+  logger.info('renderer', '等待用户点击开始体验按钮');
 });
 
 onBeforeUnmount(() => {
@@ -647,6 +757,31 @@ onBeforeUnmount(() => {
   touch-action: none;
   -ms-touch-action: none;
   overscroll-behavior: contain;
+}
+
+/* 启动体验按钮 */
+.start-experience-btn {
+  padding: 16px 48px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 50px;
+  font-size: 18px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+  min-width: 200px;
+  min-height: 60px;
+}
+
+.start-experience-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 15px 40px rgba(102, 126, 234, 0.6);
+}
+
+.start-experience-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
 }
 
 .play-button-icon {
