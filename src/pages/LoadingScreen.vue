@@ -2,8 +2,17 @@
   <transition name="fade">
     <div v-if="visible" class="loading-overlay">
       <div class="panel">
-        <div class="bar">
-          <div class="progress" :style="{ width: internalProgress + '%' }"></div>
+        <!-- 使用图片作为进度条背景 -->
+        <div class="bar-container">
+          <img src="/images/loading/资源 14.png" alt="进度条背景" class="bar-bg" />
+          <div class="bar-fill-container">
+            <img 
+              src="/images/loading/图层 3.png" 
+              alt="进度条" 
+              class="bar-fill" 
+              :style="{ clipPath: `inset(0 ${100 - internalProgress}% 0 0)` }"
+            />
+          </div>
         </div>
         <div class="percent">{{ internalProgress }}%</div>
 
@@ -56,7 +65,7 @@ onUnmounted(() => {
 .loading-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.9);
+  background: #211622; /* 使用指定的背景颜色 */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -70,50 +79,76 @@ onUnmounted(() => {
   text-align: center;
 }
 
-.bar {
+.bar-container {
+  position: relative;
   width: 100%;
-  height: 8px;
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 9999px;
-  overflow: hidden;
+  height: auto;
 }
 
-.progress {
+.bar-bg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.bar-fill-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
   height: 100%;
-  background: linear-gradient(90deg, #3b82f6, #22c55e, #f59e0b);
-  background-size: 200% 100%;
-  animation: glow 2s linear infinite;
+}
+
+.bar-fill {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: clip-path 0.3s ease;
 }
 
 .percent {
-  margin-top: 12px;
+  margin-top: 16px;
   font-weight: 600;
+  font-size: 18px;
+  color: #fff;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
 }
 
 .error {
-  margin-top: 16px;
+  margin-top: 24px;
 }
 
 .msg {
-  margin-bottom: 8px;
+  margin-bottom: 12px;
   opacity: 0.9;
+  font-size: 14px;
 }
 
 .retry {
-  padding: 8px 16px;
+  padding: 10px 24px;
   border-radius: 8px;
   background: #fff;
-  color: #111;
+  color: #211622;
   font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
-@keyframes glow {
-  0% { background-position: 0% 0%; }
-  100% { background-position: 200% 0%; }
+.retry:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.retry:active {
+  transform: translateY(0);
 }
 
 .fade-enter-active, .fade-leave-active {
   transition: opacity 0.3s ease;
 }
-.fade-enter-from, .fade-leave-to { opacity: 0; }
+.fade-enter-from, .fade-leave-to { 
+  opacity: 0; 
+}
 </style>
