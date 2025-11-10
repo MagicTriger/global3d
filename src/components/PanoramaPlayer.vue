@@ -389,6 +389,7 @@ async function initializePlayer() {
     // 步骤 7: 处理自动播放策略
     if (props.autoplay && videoRef.value) {
       loadingMessage.value = '正在启动播放...';
+      loadingProgress.value = 80;
       
       // iOS 优化：在尝试自动播放前，先加载视频数据
       // 这样即使自动播放失败，视频也已经准备好，点击播放按钮会立即播放
@@ -406,6 +407,7 @@ async function initializePlayer() {
         });
       }
       
+      loadingProgress.value = 90;
       const autoplaySuccess = await interaction.tryAutoplay(videoRef.value);
 
       if (!autoplaySuccess) {
@@ -418,6 +420,7 @@ async function initializePlayer() {
     }
 
     // 步骤 8: 启用触摸控制（如果有渲染器）
+    loadingProgress.value = 95;
     if (rendererManager.currentRenderer.value && rootRef.value) {
       interaction.enableTouchControls(rootRef.value, rendererManager.currentRenderer.value);
       logger.info('interaction', '触摸控制已启用');
