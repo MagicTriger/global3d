@@ -281,9 +281,35 @@ export function hasTouchSupport(): boolean {
  * 资源路径解析，自动附加 BASE_URL
  */
 export function resolveAssetPath(path: string): string {
-  const base = import.meta.env.BASE_URL || '/';
   const normalized = path.startsWith('/') ? path.slice(1) : path;
+  const cdn = (import.meta.env as any).VITE_ASSET_CDN_BASE as string | undefined;
+  if (cdn && /^https?:\/\//.test(cdn)) {
+    const trimmed = cdn.replace(/\/$/, '');
+    return `${trimmed}/${normalized}`;
+  }
+  const base = import.meta.env.BASE_URL || '/';
   return base + normalized;
+}
+
+/**
+ * 资源 CDN 基址（可选）
+ * 通过环境变量 VITE_ASSET_CDN_BASE 注入，例如：
+ * https://cdn.jsdelivr.net/gh/<user>/<repo>@<ref>/public/
+ */
+export const ASSET_CDN_BASE: string =
+  ((import.meta.env as any).VITE_ASSET_CDN_BASE as string) || '';
+
+/**
+ * 获取资源 CDN 的域名 Origin，用于 preconnect/dns-prefetch
+ */
+export function getAssetCDNOrigin(): string | null {
+  if (!ASSET_CDN_BASE) return null;
+  try {
+    const url = new URL(ASSET_CDN_BASE);
+    return url.origin;
+  } catch {
+    return null;
+  }
 }
 
 /**

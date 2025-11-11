@@ -12,7 +12,7 @@
 -->
 <template>
   <!-- 背包主容器：全屏显示 -->
-  <div class="backbag-container">
+  <div class="backbag-container" :style="backbagInlineStyle">
     <!-- 顶部标题区域：包含背包标题和法物流通按钮 -->
     <div class="header-area">
       <!-- 背包标题图片：八卦图标和文字组合 -->
@@ -81,6 +81,7 @@
 <script setup lang="ts">
 import { ref, defineOptions } from 'vue';
 import { useRouter } from 'vue-router';
+import { resolveAssetPath } from '../utils/env';
 
 /**
  * 背包页面脚本
@@ -124,6 +125,11 @@ const handleBack = () => {
 const handleTradeClick = () => {
   router.push('/legal-circulation');
 };
+
+// 背景图使用 CDN 路径，避免默认 /images 加载慢
+const backbagInlineStyle = {
+  backgroundImage: `url(${resolveAssetPath('images/backbag/底图.png')})`,
+};
 </script>
 
 <style scoped>
@@ -144,7 +150,6 @@ img {
   position: fixed; /* 固定定位，防止滚动 */
   width: 100vw;
   height: 100vh;
-  background-image: url('/images/backbag/底图.png'); /* 背景底图 */
   background-size: cover; /* 覆盖整个容器 */
   background-repeat: no-repeat;
   background-position: center;

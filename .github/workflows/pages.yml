@@ -32,6 +32,10 @@ jobs:
 
       - name: Build
         run: npm run build
+        env:
+          # 使用 jsDelivr 的 GitHub CDN 加速静态资源（public/ 目录）
+          # 例如：https://cdn.jsdelivr.net/gh/<owner>/<repo>@main/public/
+          VITE_ASSET_CDN_BASE: https://cdn.jsdelivr.net/gh/${{ github.repository }}@main/public/
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
