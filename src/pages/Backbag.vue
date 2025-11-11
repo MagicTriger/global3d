@@ -19,7 +19,7 @@
       <img src="/images/backbag/组 1(3).png" alt="背包标题" class="backbag-header" />
 
       <!-- 法物流通按钮：叠加在标题右侧，点击可进入交易界面 -->
-      <div class="trade-button-wrapper">
+      <div class="trade-button-wrapper" @click="handleTradeClick">
         <img src="/images/backbag/组 1(2).png" alt="法物流通" class="trade-button" />
         <span class="trade-button-text">法物流通></span>
       </div>
@@ -116,15 +116,32 @@ const activeTab = ref<string>('incense');
 const handleBack = () => {
   router.push('/');
 };
+
+/**
+ * 处理法物流通按钮点击事件
+ * 导航到法物流通页面
+ */
+const handleTradeClick = () => {
+  router.push('/legal-circulation');
+};
 </script>
 
 <style scoped>
+
+/* ========== 全局防拖拽设置 ========== */
+
+/* 禁止所有图片被拖拽 */
+img {
+  user-select: none;
+  -webkit-user-drag: none;
+  -webkit-touch-callout: none;
+}
 
 /* ========== 主容器 ========== */
 
 /* 背包主容器：全屏显示，带背景图和滑入动画 */
 .backbag-container {
-  position: relative;
+  position: fixed; /* 固定定位，防止滚动 */
   width: 100vw;
   height: 100vh;
   background-image: url('/images/backbag/底图.png'); /* 背景底图 */
@@ -132,6 +149,12 @@ const handleBack = () => {
   background-repeat: no-repeat;
   background-position: center;
   animation: slideIn 0.3s ease; /* 滑入动画 */
+  overflow: hidden; /* 禁止溢出滚动 */
+  touch-action: none; /* 禁止触摸拖拽 */
+  user-select: none; /* 禁止文本选择 */
+  -webkit-user-drag: none; /* 禁止WebKit拖拽 */
+  top: 0;
+  left: 0;
 }
 
 /* 滑入动画：从上方滑入并淡入 */
@@ -168,6 +191,8 @@ const handleBack = () => {
   object-fit: contain; /* 保持图片比例 */
   pointer-events: none; /* 不响应鼠标事件 */
   display: block;
+  user-select: none; /* 禁止选择 */
+  -webkit-user-drag: none; /* 禁止拖拽 */
 }
 
 /* 法物流通按钮容器：叠加在标题右侧 */
@@ -239,6 +264,9 @@ const handleBack = () => {
   cursor: pointer;
   transition: opacity 0.3s;
   padding: 30px 20px 10px; /* 增加顶部padding使文字在指示器内合适位置 */
+  width: 140px; /* 固定宽度确保指示器一致 */
+  min-width: 140px;
+  max-width: 140px;
 }
 
 /* 标签悬停效果 */
@@ -252,7 +280,7 @@ const handleBack = () => {
   top: 0; /* 顶部对齐 */
   left: 50%;
   transform: translateX(-50%);
-  width: 150px;
+  width: 200px;
   height: auto;
   object-fit: contain;
   pointer-events: none;
@@ -300,6 +328,8 @@ const handleBack = () => {
   height: 100%; /* 占满父容器高度 */
   overflow-y: auto; /* 垂直方向可滚动 */
   overflow-x: hidden; /* 水平方向隐藏溢出 */
+  touch-action: pan-y; /* 只允许垂直滚动 */
+  -webkit-overflow-scrolling: touch; /* iOS平滑滚动 */
 }
 
 /* 背包物品网格：4列5行布局 */
@@ -360,6 +390,8 @@ const handleBack = () => {
   object-fit: cover; /* 覆盖整个区域，可能裁剪 */
   object-position: bottom; /* 从底部开始显示 */
   pointer-events: none; /* 不响应鼠标事件 */
+  user-select: none; /* 禁止选择 */
+  -webkit-user-drag: none; /* 禁止拖拽 */
 }
 
 /* 底部左侧控制区域：包含装饰背景和返回按钮 */
@@ -443,6 +475,12 @@ const handleBack = () => {
     gap: 10px; /* 移动端减少标签间距 */
   }
 
+  .tab-item {
+    width: 120px; /* 固定宽度与指示器对齐 */
+    min-width: 120px;
+    max-width: 120px;
+  }
+
   .tab-text {
     font-size: 16px; /* 移动端文字稍小 */
   }
@@ -483,6 +521,12 @@ const handleBack = () => {
 
   .tabs-area {
     gap: 1px; /* 超小屏进一步减少间距 */
+  }
+
+  .tab-item {
+    width: 100px; /* 固定宽度与指示器对齐 */
+    min-width: 100px;
+    max-width: 100px;
   }
 
   .tab-text {
@@ -530,6 +574,17 @@ const handleBack = () => {
   .bottom-aligned-container {
     height: 30vh; /* 横屏时底部区域占更多高度 */
   }
+
+  .bottom-left-controls {
+    bottom: 15vh; /* 横屏时返回按钮位置往下调整 */
+  }
+}
+
+/* 1024x600分辨率特殊适配 */
+@media (min-width: 1024px) and (max-width: 1024px) and (min-height: 600px) and (max-height: 600px) {
+  .bottom-left-controls {
+    top: 65vh !important; /* 1024x600时返回按钮位置往下调整 */
+  }
 }
 
 /* 大屏幕适配：屏幕宽度 ≥ 1200px */
@@ -541,6 +596,12 @@ const handleBack = () => {
 
   .tabs-area {
     gap: 40px; /* 大屏幕增加间距 */
+  }
+
+  .tab-item {
+    width: 160px; /* 固定宽度与指示器对齐 */
+    min-width: 160px;
+    max-width: 160px;
   }
 
   .tab-text {
@@ -587,6 +648,12 @@ const handleBack = () => {
 
   .tabs-area {
     gap: 30px; /* 平板适中间距 */
+  }
+
+  .tab-item {
+    width: 140px; /* 固定宽度与指示器对齐 */
+    min-width: 140px;
+    max-width: 140px;
   }
 
   .tab-text {
