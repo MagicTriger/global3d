@@ -10,7 +10,22 @@
       class="background-image"
       aria-hidden="true"
     />
-
+    <!-- Back Button -->
+    <div class="back-button-container">
+      <button 
+        class="back-button"
+        @click="handleBack"
+        aria-label="返回背包页面"
+      >
+        <img 
+          src="/images/fawu/mobile/图层 4.png" 
+          alt="" 
+          aria-hidden="true"
+          draggable="false"
+        />
+      </button>
+      <span class="back-text">返回</span>
+    </div>
     <!-- Header Area -->
     <div class="header-area">
       <div class="title-container">
@@ -205,19 +220,7 @@
       </div>
     </div>
 
-    <!-- Back Button -->
-    <button 
-      class="back-button"
-      @click="handleBack"
-      aria-label="返回背包页面"
-    >
-      <img 
-        src="/images/fawu/mobile/图层 4.png" 
-        alt="" 
-        aria-hidden="true"
-        draggable="false"
-      />
-    </button>
+
   </div>
 </template>
 
@@ -365,7 +368,9 @@ const handleKeyDown = (event: KeyboardEvent): void => {
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 40px;
+  gap: 60px;
+  margin-left: 25px;
+  position: relative;
 }
 
 /* Tab Item */
@@ -459,11 +464,11 @@ const handleKeyDown = (event: KeyboardEvent): void => {
 /* Content Scroll Area */
 .content-area {
   position: absolute;
-  top: 20vh !important;
+  top: 30vh !important;
   bottom: 12vh;
   left: 0;
   right: 0;
-  padding: 0 20px;
+  padding: 0 10px;
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
@@ -474,11 +479,12 @@ const handleKeyDown = (event: KeyboardEvent): void => {
 .items-grid {
   display: grid;
   grid-template-columns: repeat(3, 110px);
-  gap: 20px;
-  padding: 20px;
+  gap: 15px;
   justify-content: center;
+  justify-items: center;
   max-width: 1400px;
   margin: 0 auto;
+  width: 100%;
 }
 
 /* Item Card */
@@ -558,18 +564,25 @@ const handleKeyDown = (event: KeyboardEvent): void => {
   padding: 5px 0;
 }
 
-/* Back Button */
-.back-button {
+/* Back Button Container */
+.back-button-container {
   position: absolute;
   left: 30px;
-  bottom: 30px;
+  top: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 20;
+}
+
+/* Back Button */
+.back-button {
   width: 60px;
   height: 60px;
   background: none;
   border: none;
   padding: 0;
   cursor: pointer;
-  z-index: 20;
   transition: all 0.3s ease;
 }
 
@@ -589,6 +602,16 @@ const handleKeyDown = (event: KeyboardEvent): void => {
 .back-button:active {
   opacity: 0.6;
   transform: scale(0.95);
+}
+
+/* Back Text */
+.back-text {
+  font-family: 'SimSun', '宋体', serif;
+  font-size: 28px;
+  color: rgba(255, 255, 255, 0.9);
+  margin-top: -10px;
+  text-align: center;
+  pointer-events: none;
 }
 
 /* Page Enter Animation */
@@ -664,11 +687,18 @@ const handleKeyDown = (event: KeyboardEvent): void => {
     padding: 5px 0;
   }
 
-  .back-button {
+  .back-button-container {
     left: 20px;
-    bottom: 20px;
+    top: 20px;
+  }
+
+  .back-button {
     width: 50px;
     height: 50px;
+  }
+
+  .back-text {
+    font-size: 24px;
   }
 }
 
@@ -733,11 +763,18 @@ const handleKeyDown = (event: KeyboardEvent): void => {
     padding: 5px 0;
   }
 
-  .back-button {
+  .back-button-container {
     left: 20px;
-    bottom: 20px;
+    top: 20px;
+  }
+
+  .back-button {
     width: 50px;
     height: 50px;
+  }
+
+  .back-text {
+    font-size: 24px;
   }
 }
 
@@ -802,11 +839,18 @@ const handleKeyDown = (event: KeyboardEvent): void => {
     padding: 5px 0;
   }
 
-  .back-button {
+  .back-button-container {
     left: 25px;
-    bottom: 25px;
+    top: 25px;
+  }
+
+  .back-button {
     width: 70px;
     height: 70px;
+  }
+
+  .back-text {
+    font-size: 26px;
   }
 }
 
@@ -834,7 +878,7 @@ const handleKeyDown = (event: KeyboardEvent): void => {
   }
 
   .content-area {
-    top: 26vh;
+    top: 36vh;
     bottom: 12vh;
     padding: 0 40px;
   }
@@ -845,11 +889,18 @@ const handleKeyDown = (event: KeyboardEvent): void => {
     padding: 20px;
   }
 
-  .back-button {
+  .back-button-container {
     left: 30px;
-    bottom: 30px;
+    top: 30px;
+  }
+
+  .back-button {
     width: 80px;
     height: 80px;
+  }
+
+  .back-text {
+    font-size: 28px;
   }
 }
 
