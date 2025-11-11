@@ -8,6 +8,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { Renderer, RendererConfig } from '../types/panorama';
 import logger from '../utils/logger';
 import { getOptimalPixelRatio } from '../utils/performance';
+import { assessDevicePerformance } from '../utils/env';
 
 export class WebGLRenderer implements Renderer {
   private scene: THREE.Scene | null = null;
@@ -26,6 +27,10 @@ export class WebGLRenderer implements Renderer {
   private resizeObserver: ResizeObserver | null = null;
   private orientationChangeHandler: (() => void) | null = null;
   private resizeTimeout: number | null = null;
+  // 视频帧同步相关
+  private useVideoFrameCallback = false;
+  private videoFrameCallbackId: number | null = null;
+  private videoFrameTimerId: number | null = null;
   
   // 帧率限制相关
   private lastFrameTime = 0;
@@ -65,21 +70,26 @@ export class WebGLRenderer implements Renderer {
       });
       this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
 
-      // 限制设备像素比以优化性能（最大 2）
-      const pixelRatio = getOptimalPixelRatio(2);
+      // 限制设备像素比以优化性能（根据设备性能与平台动态限制）
+      const devicePerf = assessDevicePerformance();
+      const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+        navigator.userAgent
+      );
+      const maxPixelRatio = devicePerf.performanceScore === 'low' ? 1.25 : isMobileDevice ? 1.5 : 2;
+      const pixelRatio = getOptimalPixelRatio(maxPixelRatio);
       this.renderer.setPixelRatio(pixelRatio);
 
-      logger.info('renderer', `使用像素比: ${pixelRatio} (设备像素比: ${window.devicePixelRatio})`);
+      logger.info(
+        'renderer',
+        `使用像素比: ${pixelRatio} (设备像素比: ${window.devicePixelRatio}, 性能:${devicePerf.performanceScore})`
+      );
 
       // 将渲染器添加到容器
       this.container.appendChild(this.renderer.domElement);
 
       // 创建内翻球体几何体（根据设备性能调整分段数）
       // 移动端使用更低的分段数以提升性能
-      const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-        navigator.userAgent
-      );
-      const segments = isMobileDevice ? 24 : 32; // 移动端24段，桌面32段
+      const segments = devicePerf.performanceScore === 'low' ? 16 : isMobileDevice ? 24 : 32; // 低性能16段，移动端24段，桌面32段
       const geometry = new THREE.SphereGeometry(500, segments, segments);
       geometry.scale(-1, 1, 1); // 内翻球体
 
@@ -322,9 +332,8 @@ export class WebGLRenderer implements Renderer {
         this.controls.update();
       }
 
-      // 确保视频纹理更新
-      if (this.videoTexture && this.videoElement) {
-        // 检查视频是否有新数据需要更新
+      // 非 rVFC 模式下，保证纹理按需更新（避免每帧强制更新导致卡顿）
+      if (this.videoTexture && this.videoElement && !this.useVideoFrameCallback) {
         if (this.videoElement.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
           this.videoTexture.needsUpdate = true;
         }
@@ -403,6 +412,22 @@ export class WebGLRenderer implements Renderer {
     if (this.videoTexture) {
       this.videoTexture.dispose();
       this.videoTexture = null;
+    }
+
+    // 清理视频帧同步
+    if (this.videoElement) {
+      const v = this.videoElement as any;
+      if (this.useVideoFrameCallback && typeof v.cancelVideoFrameCallback === 'function' && this.videoFrameCallbackId !== null) {
+        try {
+          v.cancelVideoFrameCallback(this.videoFrameCallbackId);
+        } catch {}
+        this.videoFrameCallbackId = null;
+      }
+      if (this.videoFrameTimerId !== null) {
+        clearInterval(this.videoFrameTimerId);
+        this.videoFrameTimerId = null;
+      }
+      this.useVideoFrameCallback = false;
     }
 
     // 销毁网格和材质
@@ -515,8 +540,13 @@ export class WebGLRenderer implements Renderer {
     // 更新渲染器尺寸
     this.renderer.setSize(width, height);
 
-    // 处理高 DPI 屏幕（限制最大像素比为 2）
-    const pixelRatio = getOptimalPixelRatio(2);
+    // 根据设备性能与平台动态限制像素比
+    const devicePerf = assessDevicePerformance();
+    const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+      navigator.userAgent
+    );
+    const maxPixelRatio = devicePerf.performanceScore === 'low' ? 1.25 : isMobileDevice ? 1.5 : 2;
+    const pixelRatio = getOptimalPixelRatio(maxPixelRatio);
     this.renderer.setPixelRatio(pixelRatio);
 
     const endTime = performance.now();
@@ -583,6 +613,8 @@ export class WebGLRenderer implements Renderer {
         this.videoTexture.colorSpace = THREE.SRGBColorSpace;
         this.videoTexture.minFilter = THREE.LinearFilter;
         this.videoTexture.magFilter = THREE.LinearFilter;
+        // 视频纹理不需要 mipmaps，禁用以减少 GPU 负载
+        this.videoTexture.generateMipmaps = false;
         // RGBFormat 在新版本中已移除，不再需要设置
 
         // 将纹理应用到球体材质
@@ -603,6 +635,9 @@ export class WebGLRenderer implements Renderer {
           // 应用新材质
           this.mesh.material = material;
         }
+
+        // 设置视频帧同步：优先使用 requestVideoFrameCallback
+        this.setupVideoFrameSync(video);
 
         logger.info('renderer', '视频纹理创建并应用成功');
 
@@ -668,6 +703,7 @@ export class WebGLRenderer implements Renderer {
               this.videoTexture.colorSpace = THREE.SRGBColorSpace;
               this.videoTexture.minFilter = THREE.LinearFilter;
               this.videoTexture.magFilter = THREE.LinearFilter;
+              this.videoTexture.generateMipmaps = false;
               // RGBFormat 在新版本中已移除
 
               const material = new THREE.MeshBasicMaterial({
@@ -684,6 +720,9 @@ export class WebGLRenderer implements Renderer {
 
               this.mesh.material = material;
               logger.info('renderer', '强制创建视频纹理成功');
+
+              // 设置视频帧同步（即使是强制创建也需要）
+              this.setupVideoFrameSync(video);
             } catch (error) {
               logger.error('renderer', '强制创建视频纹理失败', error);
             }
@@ -691,5 +730,73 @@ export class WebGLRenderer implements Renderer {
         }
       }, 2000);
     }
+  }
+
+  /**
+   * 设置视频帧同步机制
+   * - 优先使用 requestVideoFrameCallback（iOS 15+/现代浏览器）
+   * - 回退到固定间隔（30fps）触发纹理更新
+   */
+  private setupVideoFrameSync(video: HTMLVideoElement): void {
+    // 清理旧的同步
+    if (this.videoElement) {
+      const v = this.videoElement as any;
+      if (this.useVideoFrameCallback && typeof v.cancelVideoFrameCallback === 'function' && this.videoFrameCallbackId !== null) {
+        try {
+          v.cancelVideoFrameCallback(this.videoFrameCallbackId);
+        } catch {}
+        this.videoFrameCallbackId = null;
+      }
+      if (this.videoFrameTimerId !== null) {
+        clearInterval(this.videoFrameTimerId);
+        this.videoFrameTimerId = null;
+      }
+    }
+
+    const vAny = video as any;
+    if (typeof vAny.requestVideoFrameCallback === 'function') {
+      this.useVideoFrameCallback = true;
+      const update = (_now: number, _metadata: any) => {
+        if (this.videoTexture) {
+          this.videoTexture.needsUpdate = true;
+        }
+        // 持续监听下一帧
+        try {
+          this.videoFrameCallbackId = vAny.requestVideoFrameCallback(update);
+        } catch {
+          // 如果调用失败，降级到定时器
+          this.useVideoFrameCallback = false;
+          this.setupVideoFrameSyncFallback();
+        }
+      };
+      try {
+        this.videoFrameCallbackId = vAny.requestVideoFrameCallback(update);
+        logger.info('renderer', '使用 requestVideoFrameCallback 进行视频帧同步');
+      } catch (e) {
+        logger.warn('renderer', 'requestVideoFrameCallback 注册失败，回退到定时器', e);
+        this.useVideoFrameCallback = false;
+        this.setupVideoFrameSyncFallback();
+      }
+    } else {
+      // 回退方案
+      this.useVideoFrameCallback = false;
+      this.setupVideoFrameSyncFallback();
+    }
+  }
+
+  /**
+   * 视频帧同步回退：使用固定间隔触发 needsUpdate（默认 30fps）
+   */
+  private setupVideoFrameSyncFallback(): void {
+    if (this.videoFrameTimerId !== null) {
+      clearInterval(this.videoFrameTimerId);
+    }
+    // 30fps 的更新频率在移动端更平衡
+    this.videoFrameTimerId = window.setInterval(() => {
+      if (this.videoTexture && this.videoElement && this.videoElement.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+        this.videoTexture.needsUpdate = true;
+      }
+    }, 33);
+    logger.info('renderer', '使用定时器进行视频帧同步 (≈30fps)');
   }
 }
