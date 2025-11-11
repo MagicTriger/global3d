@@ -79,7 +79,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, defineOptions } from 'vue';
 import { useRouter } from 'vue-router';
 
 /**
@@ -691,3 +691,5 @@ img {
   }
 }
 </style>
+// 显式命名组件以支持 KeepAlive 精确缓存
+defineOptions({ name: 'Backbag' });

@@ -65,7 +65,10 @@
       :muted="muted"
       :autoplay="autoplay"
       :loop="loop"
-      playsinline webkit-playsinline x5-playsinline x5-video-player-type="h5"
+      playsinline
+      webkit-playsinline
+      x5-playsinline
+      x5-video-player-type="h5"
       preload="metadata"
       disableRemotePlayback
     ></video>
@@ -482,7 +485,6 @@ async function initializePlayer() {
         if (firstFrameEmitted) return;
         const videoEl = videoRef.value;
         // 使用 requestVideoFrameCallback 等待首帧渲染
-        // @ts-ignore
         const rVFC = videoEl && (videoEl as any).requestVideoFrameCallback;
         if (videoEl && typeof rVFC === 'function') {
           try {
@@ -811,7 +813,10 @@ onMounted(async () => {
         iosGestureListener = null;
       }
     };
-    document.addEventListener('touchstart', iosGestureListener as EventListener, { once: true, passive: true });
+    document.addEventListener('touchstart', iosGestureListener as EventListener, {
+      once: true,
+      passive: true,
+    });
 
     // 页面变为可见时再尝试一次播放（从后台返回或切换标签）
     visibilityListener = async () => {

@@ -4,7 +4,7 @@
     <LoadingScreen :visible="visible" :progress="progress" :error="error" @retry="handleRetry" />
     <main>
       <RouterView v-slot="{ Component }">
-        <KeepAlive include="Home">
+        <KeepAlive include="Home,Backbag,LegalCirculation">
           <component :is="Component" />
         </KeepAlive>
       </RouterView>
@@ -41,6 +41,40 @@ onMounted(() => {
     link.as = 'video';
     link.href = url;
     document.head.appendChild(link);
+  });
+
+  // 在空闲时间预取背包与法物流通的路由代码块，避免首次点击时下载延迟
+  deferNonCriticalTask(() => {
+    // 仅预热模块，不执行逻辑
+    import('./pages/Backbag.vue');
+    import('./pages/Legal-circulation.vue');
+  });
+
+  // 在空闲时间预取背包与法物流通首屏关键图片，缩短首进白屏时间
+  deferNonCriticalTask(() => {
+    const essentialImages = [
+      // Backbag 首屏关键图
+      '/images/backbag/底图.png',
+      '/images/backbag/组 1(3).png',
+      '/images/backbag/组 1(2).png',
+      '/images/backbag/底.png',
+      '/images/backbag/图层 5 副本 2.png',
+      '/images/backbag/图层 2.png',
+      '/images/backbag/生成游戏图标 (7).png',
+      // Legal-circulation 首屏关键图
+      '/images/fawu/mobile/组 1.png',
+      '/images/fawu/mobile/太极.png',
+      '/images/fawu/mobile/price-bg.png',
+      '/images/fawu/mobile/椭圆 1 拷贝 3.png',
+      '/images/fawu/mobile/矩形 2.png',
+      '/images/fawu/mobile/图层 4.png',
+    ];
+    for (const src of essentialImages) {
+      const img = new Image();
+      img.decoding = 'async';
+      img.loading = 'eager';
+      img.src = src;
+    }
   });
 
   // 非关键逻辑延迟：预取首页装饰图片（不阻塞首屏）
