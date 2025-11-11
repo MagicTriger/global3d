@@ -202,7 +202,7 @@ function buildVideoSources(): VideoSource[] {
  */
 async function handlePlayClick() {
   logger.info('interaction', '播放按钮被点击');
-  
+
   if (!videoRef.value) {
     logger.error('interaction', '视频元素不存在');
     return;
@@ -223,7 +223,7 @@ async function handlePlayClick() {
       loadingMessage.value = '正在加载视频...';
       isLoading.value = true;
       video.load();
-      
+
       // 等待视频准备好
       await new Promise<void>((resolve, reject) => {
         const onCanPlay = () => {
@@ -231,16 +231,16 @@ async function handlePlayClick() {
           video.removeEventListener('error', onError);
           resolve();
         };
-        
+
         const onError = () => {
           video.removeEventListener('canplay', onCanPlay);
           video.removeEventListener('error', onError);
           reject(new Error('视频加载失败'));
         };
-        
+
         video.addEventListener('canplay', onCanPlay, { once: true });
         video.addEventListener('error', onError, { once: true });
-        
+
         // 5秒超时
         setTimeout(() => {
           video.removeEventListener('canplay', onCanPlay);
@@ -248,32 +248,17 @@ async function handlePlayClick() {
           reject(new Error('视频加载超时'));
         }, 5000);
       });
-      
+
       isLoading.value = false;
     }
 
     await interaction.handlePlayButtonClick(video);
-    
   } catch (error) {
     logger.error('interaction', '播放按钮点击处理失败', error);
     isLoading.value = false;
     errorMessage.value = error instanceof Error ? error.message : '无法播放视频，请刷新页面重试';
     canRetry.value = true;
   }
-}
-
-/**
- * 处理开始体验按钮点击
- * 这是绕过自动播放限制的关键 - 用户主动点击后，所有浏览器都允许播放
- */
-async function handleStartExperience() {
-  logger.info('interaction', '用户点击开始体验按钮');
-  
-  // 隐藏启动屏幕
-  showStartScreen.value = false;
-  
-  // 开始初始化播放器
-  await initializePlayer();
 }
 
 /**
@@ -297,7 +282,7 @@ async function initializePlayer() {
     if (isWechatBrowser) {
       logger.info('renderer', '检测到微信浏览器环境');
     }
-    
+
     logger.info('renderer', '开始初始化全景播放器');
     isLoading.value = true;
     loadingProgress.value = 10; // 初始进度
@@ -390,7 +375,7 @@ async function initializePlayer() {
     if (props.autoplay && videoRef.value) {
       loadingMessage.value = '正在启动播放...';
       loadingProgress.value = 80;
-      
+
       // iOS 优化：在尝试自动播放前，先加载视频数据
       // 这样即使自动播放失败，视频也已经准备好，点击播放按钮会立即播放
       if (videoRef.value.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) {
@@ -406,7 +391,7 @@ async function initializePlayer() {
           video.load();
         });
       }
-      
+
       loadingProgress.value = 90;
       const autoplaySuccess = await interaction.tryAutoplay(videoRef.value);
 
@@ -436,10 +421,10 @@ async function initializePlayer() {
 
       // 微信浏览器检测
       const isWechatBrowser = /MicroMessenger/i.test(navigator.userAgent);
-      
+
       // 微信浏览器需要更长的超时时间（3秒），因为加载较慢
       const timeoutDuration = isWechatBrowser ? 3000 : 1000;
-      
+
       // 设置超时机制：如果超时没有触发事件，强制显示内容
       const forceShowTimeout = setTimeout(() => {
         if (!readyEventEmitted && rendererManager.currentRenderer.value && videoRef.value) {

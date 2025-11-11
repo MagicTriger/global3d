@@ -62,9 +62,6 @@
       @click="openBackbag"
     />
     
-    <!-- 背包界面 -->
-    <Backbag v-if="showBackbag" @close="closeBackbag" />
-    
     <!-- 调试按钮 -->
     <button
       v-if="!showDebug && !loadingVisible"
@@ -79,19 +76,19 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
+import { useRouter } from 'vue-router';
 import PanoramaPlayer from '../components/PanoramaPlayer.vue';
 import LoadingScreen from '../components/LoadingScreen.vue';
 import DebugPanel from '../components/DebugPanel.vue';
-import Backbag from '../components/backbag.vue';
+
+// 路由实例
+const router = useRouter();
 
 // 显示调试面板（默认隐藏，点击图标打开）
 const showDebug = ref(false);
 
 // 控制右上角装饰图片的显示（true显示图片2，false显示图片3）
 const showDecoration2 = ref(true);
-
-// 控制背包界面显示
-const showBackbag = ref(false);
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -167,14 +164,7 @@ const toggleDecoration = () => {
  * 打开背包界面
  */
 const openBackbag = () => {
-  showBackbag.value = true;
-};
-
-/**
- * 关闭背包界面
- */
-const closeBackbag = () => {
-  showBackbag.value = false;
+  router.push('/backbag');
 };
 
 // 监听旧版全景加载完成事件（向后兼容）
