@@ -105,12 +105,15 @@ export class CSS3DRenderer implements Renderer {
       transform: translateZ(0);
     `;
 
-    // 配置视频元素样式
+    // 配置视频元素样式（覆盖组件默认的隐藏样式，确保 poster 可见）
     this.videoElement.style.cssText = `
       width: 100%;
       height: 100%;
       object-fit: cover;
       display: block;
+      opacity: 1 !important;
+      z-index: 1;
+      pointer-events: auto;
     `;
 
     // 设置视频属性以确保移动端兼容性

@@ -122,9 +122,11 @@ export function useVideoLoader() {
       video.muted = true;
       video.defaultMuted = true;
     } else if (isIOS()) {
-      // iOS 优化：使用 metadata 预加载策略，提前加载视频元数据和首帧
-      video.preload = 'metadata';
-      logger.info('video', 'iOS 设备：使用 metadata 预加载策略');
+      // iOS 优化：自动播放时使用 auto 预加载；同时默认静音与禁用远程播放
+      video.preload = cfg.autoplay ? 'auto' : 'metadata';
+      video.defaultMuted = true;
+      video.setAttribute('disableRemotePlayback', '');
+      logger.info('video', `iOS 设备：使用 ${video.preload} 预加载策略`);
     } else {
       // Android 非微信：自动预加载，更快的体验
       video.preload = 'auto';
@@ -450,6 +452,65 @@ export function useVideoLoader() {
 
       // 尝试加载视频（带重试）
       await retryLoad(video, state.currentQuality.value);
+
+      // 加速首帧显示：等待元数据并进行首帧预解码（跨平台安全）
+      try {
+        const PRIME_TIMEOUT = 1500;
+
+        if (video.readyState < HTMLMediaElement.HAVE_METADATA) {
+          await new Promise<void>((resolve) => {
+            const onLoadedMetadata = () => {
+              video.removeEventListener('loadedmetadata', onLoadedMetadata);
+              resolve();
+            };
+            video.addEventListener('loadedmetadata', onLoadedMetadata, { once: true });
+            setTimeout(() => {
+              video.removeEventListener('loadedmetadata', onLoadedMetadata);
+              resolve();
+            }, PRIME_TIMEOUT);
+          });
+        }
+
+        // 试探性设置一个极小的 currentTime 以触发首帧解码
+        try {
+          const targetTime = 0.001;
+          // 某些 HLS 实现对设置 currentTime 较敏感，失败则忽略
+          video.currentTime = targetTime;
+        } catch (e) {
+          logger.warn('video', '设置 currentTime 失败，可能为 HLS/VOD 行为', e);
+        }
+
+        // 进行一次播放-暂停以促使首帧渲染（静音更容易通过策略）
+        const originalMuted = video.muted;
+        if (cfg.autoplay && !video.muted) {
+          // 自动播放场景必须静音，避免策略拦截
+          video.muted = true;
+        }
+
+        try {
+          await video.play();
+          video.pause();
+          logger.info('video', '首帧预解码完成（play/pause）');
+        } catch (e) {
+          // iOS/策略拦截下可能失败，忽略即可，由后续事件兜底
+          logger.warn('video', '首帧预解码 play() 失败，忽略', e);
+        } finally {
+          // 还原静音状态
+          video.muted = originalMuted;
+        }
+      } catch (primeError) {
+        logger.warn('video', '首帧加速过程失败，继续正常流程', primeError);
+      }
+
+      // iOS：触发一次 load() 加速首帧（仅在自动播放场景）
+      if (isIOS() && cfg.autoplay) {
+        try {
+          logger.info('video', 'iOS：触发一次 video.load() 加速首帧');
+          video.load();
+        } catch (e) {
+          logger.warn('video', 'iOS：触发 video.load() 失败', e);
+        }
+      }
 
       logger.info('video', '视频加载完成');
     } catch (error) {

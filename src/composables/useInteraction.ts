@@ -4,6 +4,7 @@
  */
 
 import { ref, readonly } from 'vue';
+import { isIOS } from '../utils/env';
 import type { Renderer } from '../types/panorama';
 import logger from '../utils/logger';
 
@@ -119,7 +120,12 @@ export function useInteraction() {
       // 捕获 NotAllowedError 异常
       if (error.name === 'NotAllowedError') {
         logger.warn('interaction', '自动播放被阻止，需要用户手势', error);
-        displayPlayButton();
+        // 仅在 iOS 显示播放按钮；非 iOS 不显示按钮
+        if (isIOS()) {
+          displayPlayButton();
+        } else {
+          hidePlayButton();
+        }
         return false;
       } else {
         logger.error('interaction', '自动播放失败（非权限问题）', error);

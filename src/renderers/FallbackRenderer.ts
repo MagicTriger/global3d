@@ -88,7 +88,7 @@ export class FallbackRenderer implements Renderer {
       cursor: grab;
     `;
 
-    // 配置视频元素样式
+    // 配置视频元素样式（覆盖组件默认隐藏样式，确保 poster 可见）
     this.videoElement.style.cssText = `
       position: absolute;
       width: 200%;
@@ -96,6 +96,9 @@ export class FallbackRenderer implements Renderer {
       object-fit: cover;
       display: block;
       transition: transform 0.1s ease-out;
+      opacity: 1 !important;
+      z-index: 1;
+      pointer-events: auto;
     `;
 
     // 设置视频属性以确保移动端兼容性

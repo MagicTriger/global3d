@@ -276,3 +276,27 @@ export function hasTouchSupport(): boolean {
     (navigator as any).msMaxTouchPoints > 0
   );
 }
+
+/**
+ * 资源路径解析，自动附加 BASE_URL
+ */
+export function resolveAssetPath(path: string): string {
+  const base = import.meta.env.BASE_URL || '/';
+  const normalized = path.startsWith('/') ? path.slice(1) : path;
+  return base + normalized;
+}
+
+/**
+ * 默认全景视频路径配置
+ * 可通过环境变量 VITE_DEFAULT_PANORAMA_VIDEO 覆盖（相对 public 的路径）
+ */
+export const DEFAULT_PANORAMA_VIDEO = (
+  (import.meta.env as any).VITE_DEFAULT_PANORAMA_VIDEO as string
+) || 'videos/大殿全景.mp4';
+
+/**
+ * 获取默认全景视频的完整 URL（带 BASE_URL）
+ */
+export function getDefaultPanoramaVideoUrl(): string {
+  return resolveAssetPath(DEFAULT_PANORAMA_VIDEO);
+}

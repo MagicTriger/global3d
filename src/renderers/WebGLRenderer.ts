@@ -85,10 +85,30 @@ export class WebGLRenderer implements Renderer {
 
       logger.info('renderer', `球体分段数: ${segments} (${isMobileDevice ? '移动端' : '桌面端'})`);
 
-      // 创建初始材质（占位颜色 - 深灰色而不是纯黑，避免与黑屏混淆）
-      const material = new THREE.MeshBasicMaterial({
-        color: 0x1a1a1a, // 深灰色占位，表示正在加载
-      });
+      // 创建初始材质：优先使用 poster 作为占位纹理，提升首屏可见性
+      let material: THREE.MeshBasicMaterial;
+      const posterUrl = this.videoElement?.poster || '';
+
+      if (posterUrl) {
+        try {
+          const texture = await new Promise<THREE.Texture>((resolve, reject) => {
+            new THREE.TextureLoader().load(posterUrl, resolve, undefined, reject);
+          });
+
+          texture.colorSpace = THREE.SRGBColorSpace;
+          texture.minFilter = THREE.LinearFilter;
+          texture.magFilter = THREE.LinearFilter;
+
+          material = new THREE.MeshBasicMaterial({ map: texture });
+          logger.info('renderer', '使用 poster 纹理作为占位材质');
+        } catch (e) {
+          logger.warn('renderer', 'poster 加载失败，回退到深灰占位', e);
+          material = new THREE.MeshBasicMaterial({ color: 0x1a1a1a });
+        }
+      } else {
+        // 无 poster 时使用深灰占位，避免纯黑
+        material = new THREE.MeshBasicMaterial({ color: 0x1a1a1a });
+      }
 
       // 创建网格
       this.mesh = new THREE.Mesh(geometry, material);
@@ -624,12 +644,12 @@ export class WebGLRenderer implements Renderer {
       video.addEventListener('playing', onPlaying);
       eventListenersAdded = true;
 
-      // 设置超时机制：5 秒内未准备好则报错
+      // 设置超时机制：2 秒内未准备好则尝试强制创建纹理，以减少黑屏时间
       textureTimeoutId = window.setTimeout(() => {
         if (!this.videoTexture) {
           logger.error(
             'renderer',
-            `视频纹理创建超时 (5秒)，readyState: ${video.readyState}, paused: ${video.paused}, currentTime: ${video.currentTime}`
+            `视频纹理创建超时 (2秒)，readyState: ${video.readyState}, paused: ${video.paused}, currentTime: ${video.currentTime}`
           );
 
           // 移除事件监听器
@@ -669,7 +689,7 @@ export class WebGLRenderer implements Renderer {
             }
           }
         }
-      }, 5000);
+      }, 2000);
     }
   }
 }

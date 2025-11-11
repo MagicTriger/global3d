@@ -60,8 +60,14 @@
     <!-- 视频元素（隐藏，用作纹理源） -->
     <video
       ref="videoRef"
-      class="absolute w-px h-px opacity-0 -z-10 pointer-events-none"
+      class="absolute w-[2px] h-[2px] opacity-0 -z-10 pointer-events-none"
       :poster="poster"
+      :muted="muted"
+      :autoplay="autoplay"
+      :loop="loop"
+      playsinline webkit-playsinline x5-playsinline x5-video-player-type="h5"
+      preload="metadata"
+      disableRemotePlayback
     ></video>
 
     <!-- 错误提示 -->
@@ -90,7 +96,15 @@
 </template>
 
 <script lang="ts" setup>
-import { onMounted, onBeforeUnmount, ref, computed } from 'vue';
+import {
+  onMounted,
+  onBeforeUnmount,
+  ref,
+  computed,
+  onDeactivated,
+  onActivated,
+  nextTick,
+} from 'vue';
 import type { VideoSource } from '../types/panorama';
 import { useCompatibility } from '../composables/useCompatibility';
 import { useRenderer } from '../composables/useRenderer';
@@ -98,6 +112,7 @@ import { useVideoLoader } from '../composables/useVideoLoader';
 import { useInteraction } from '../composables/useInteraction';
 import logger from '../utils/logger';
 import memoryMonitor from '../utils/memoryMonitor';
+import { isIOS } from '../utils/env';
 
 // Props 定义
 interface Props {
@@ -163,7 +178,10 @@ const loadingProgress = ref(0);
 // 计算属性
 const showPlayButton = computed(() => interaction.showPlayButton.value);
 const currentRendererType = computed(() => rendererManager.currentType.value);
-
+// iOS/第三方浏览器兜底：首次触摸与页面可见时再尝试播放
+let iosGestureListener: ((e: Event) => void) | null = null;
+let visibilityListener: ((e: Event) => void) | null = null;
+let wasPlayingBeforeDeactivation = false;
 // 清理函数引用
 let loopCleanup: (() => void) | undefined;
 
@@ -451,10 +469,49 @@ async function initializePlayer() {
           );
           emit('ready');
           readyEventEmitted = true;
+
+          // 兜底：强制显示后同样等待首帧渲染通知
+          emitFirstFrameAfterRender();
         }
       }, timeoutDuration);
 
       // loadeddata 事件 - 视频首帧数据加载完成（最早可显示内容）
+      let firstFrameEmitted = false;
+
+      function emitFirstFrameAfterRender() {
+        if (firstFrameEmitted) return;
+        const videoEl = videoRef.value;
+        // 使用 requestVideoFrameCallback 等待首帧渲染
+        // @ts-ignore
+        const rVFC = videoEl && (videoEl as any).requestVideoFrameCallback;
+        if (videoEl && typeof rVFC === 'function') {
+          try {
+            rVFC.call(videoEl, () => {
+              if (!firstFrameEmitted) {
+                window.dispatchEvent(new CustomEvent('panorama:first-frame-rendered'));
+                firstFrameEmitted = true;
+              }
+            });
+          } catch {
+            // 兜底：下一帧
+            requestAnimationFrame(() => {
+              if (!firstFrameEmitted) {
+                window.dispatchEvent(new CustomEvent('panorama:first-frame-rendered'));
+                firstFrameEmitted = true;
+              }
+            });
+          }
+        } else {
+          // 兜底：下一帧
+          requestAnimationFrame(() => {
+            if (!firstFrameEmitted) {
+              window.dispatchEvent(new CustomEvent('panorama:first-frame-rendered'));
+              firstFrameEmitted = true;
+            }
+          });
+        }
+      }
+
       const handleLoadedData = () => {
         clearTimeout(forceShowTimeout);
         // 在 loadeddata 时就通知渲染器创建纹理，最早显示内容
@@ -483,6 +540,9 @@ async function initializePlayer() {
           emit('ready');
           readyEventEmitted = true;
           logger.info('video', '视频数据加载完成，提前显示内容');
+
+          // 等待首帧渲染后再通知全局 finish
+          emitFirstFrameAfterRender();
         }
       };
 
@@ -512,6 +572,7 @@ async function initializePlayer() {
           );
           emit('ready');
           readyEventEmitted = true;
+          emitFirstFrameAfterRender();
         }
 
         isBuffering.value = false;
@@ -546,6 +607,7 @@ async function initializePlayer() {
           );
           emit('ready');
           readyEventEmitted = true;
+          emitFirstFrameAfterRender();
         }
       };
 
@@ -565,6 +627,12 @@ async function initializePlayer() {
             loadingProgress.value = progress;
             // 发射 loading 事件
             emit('loading', progress);
+            // 全局事件：同步进度到全局加载层
+            window.dispatchEvent(
+              new CustomEvent('panorama:loading', {
+                detail: { progress },
+              })
+            );
           }
         }
       };
@@ -582,6 +650,12 @@ async function initializePlayer() {
         canRetry.value = true;
         // 发射 error 事件
         emit('error', errorMsg);
+        // 全局事件：同步错误到全局加载层
+        window.dispatchEvent(
+          new CustomEvent('panorama:error', {
+            detail: { message: errorMsg },
+          })
+        );
       };
 
       video.addEventListener('loadeddata', handleLoadedData, { once: true });
@@ -609,7 +683,95 @@ async function initializePlayer() {
     emit('error', errorMsg);
   }
 }
+// 重新挂载渲染器（KeepAlive 激活后如果画布丢失）
+async function reattachRendererIfNeeded() {
+  const type = rendererManager.currentType.value;
+  if (!type || !videoRef.value) return;
 
+  let container: HTMLElement | null = null;
+  if (type === 'webgl') {
+    container = webglContainerRef.value;
+  } else if (type === 'css3d') {
+    container = css3dContainerRef.value;
+  } else {
+    container = fallbackContainerRef.value;
+  }
+  if (!container) return;
+
+  const missingCanvas = container.childElementCount === 0;
+  if (missingCanvas || !rendererManager.currentRenderer.value) {
+    const view = rendererManager.getCurrentView();
+    rendererManager.dispose();
+    await rendererManager.initRenderer({
+      type,
+      container,
+      videoElement: videoRef.value!,
+      initialView: {
+        yaw: view.yaw || props.initialYawDeg,
+        pitch: view.pitch || props.initialPitchDeg,
+        fov: props.initialFov,
+      },
+    });
+    rendererManager.currentRenderer.value?.onVideoReady(videoRef.value!);
+  }
+
+  if (rootRef.value && rendererManager.currentRenderer.value) {
+    interaction.enableTouchControls(rootRef.value, rendererManager.currentRenderer.value);
+  }
+}
+async function attemptResumePlayback() {
+  if (!videoRef.value) return;
+  try {
+    await videoRef.value.play();
+    interaction.hidePlayButton();
+    isLoading.value = false;
+    loadingMessage.value = '';
+  } catch {
+    // 若仍被策略拦截，显示播放按钮引导用户点击
+    if (isIOS()) {
+      interaction.displayPlayButton();
+    } else {
+      interaction.hidePlayButton();
+    }
+  }
+}
+// 激活时恢复播放与渲染器挂载
+onActivated(async () => {
+  await nextTick();
+  memoryMonitor.startMonitoring(10000);
+  isLoading.value = false;
+  isBuffering.value = false;
+  loadingMessage.value = '';
+
+  await reattachRendererIfNeeded();
+
+  if (videoRef.value) {
+    try {
+      if (wasPlayingBeforeDeactivation || props.autoplay) {
+        await videoRef.value.play();
+        interaction.hidePlayButton();
+      }
+    } catch {
+      if (isIOS()) {
+        interaction.displayPlayButton();
+      } else {
+        interaction.hidePlayButton();
+      }
+    }
+  }
+});
+
+// 停用时暂停并记录状态
+onDeactivated(() => {
+  memoryMonitor.stopMonitoring();
+  if (rootRef.value) {
+    interaction.disableTouchControls(rootRef.value);
+  }
+  if (videoRef.value) {
+    wasPlayingBeforeDeactivation = !videoRef.value.paused;
+    videoRef.value.pause();
+  }
+});
 // 对外暴露 API
 defineExpose({
   setView: (yawDeg: number, pitchDeg: number) => {
@@ -639,6 +801,26 @@ onMounted(async () => {
 
   // 自动初始化播放器
   await initializePlayer();
+
+  // iOS：一次性触摸事件触发播放，避免策略拦截
+  if (isIOS()) {
+    iosGestureListener = async () => {
+      await attemptResumePlayback();
+      if (iosGestureListener) {
+        document.removeEventListener('touchstart', iosGestureListener as EventListener);
+        iosGestureListener = null;
+      }
+    };
+    document.addEventListener('touchstart', iosGestureListener as EventListener, { once: true, passive: true });
+
+    // 页面变为可见时再尝试一次播放（从后台返回或切换标签）
+    visibilityListener = async () => {
+      if (!document.hidden) {
+        await attemptResumePlayback();
+      }
+    };
+    document.addEventListener('visibilitychange', visibilityListener as EventListener);
+  }
 });
 
 onBeforeUnmount(() => {
@@ -696,6 +878,16 @@ onBeforeUnmount(() => {
     logger.info('renderer', '全景播放器资源清理完成');
   } catch (error) {
     logger.error('renderer', '清理资源时发生错误', error);
+  }
+
+  // 清理 iOS 回退播放监听器
+  if (iosGestureListener) {
+    document.removeEventListener('touchstart', iosGestureListener as EventListener);
+    iosGestureListener = null;
+  }
+  if (visibilityListener) {
+    document.removeEventListener('visibilitychange', visibilityListener as EventListener);
+    visibilityListener = null;
   }
 });
 </script>
