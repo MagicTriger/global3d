@@ -123,45 +123,11 @@ export function useCompatibility() {
       return 'fallback';
     }
 
-    // 针对百度移动浏览器：优先使用 CSS3D，规避 WebGL+VideoTexture 黑屏问题
-    try {
-      const ua = navigator.userAgent || '';
-      const isBaiduBrowser = /Baidu|BIDUBrowser|baiduboxapp|SearchCraft/i.test(ua);
-      const isMobileDevice = isMobile();
-
-      if (isBaiduBrowser && isMobileDevice) {
-        if (targetCaps.css3d) {
-          selectedRenderer.value = 'css3d';
-          logger.info('compatibility', '检测到百度移动浏览器，强制使用 CSS3D 渲染器');
-          return 'css3d';
-        }
-        // 若不支持 CSS3D，则按能力继续选择（可能 WebGL 或 fallback）
-      }
-    } catch (e) {
-      // UA 解析异常不阻断流程
-    }
-
     let renderer: RendererType;
 
-    // 1. 优先选择 WebGL（如果支持且性能良好）
+    // 1. 优先选择 WebGL（如果支持则直接使用）
     if (targetCaps.webgl) {
-      // 检查设备性能
-      const devicePerf = assessDevicePerformance();
-
-      // 低性能设备可能不适合 WebGL
-      if (devicePerf.performanceScore === 'low') {
-        logger.info('compatibility', '设备性能较低，尝试使用 CSS3D 渲染器', devicePerf);
-
-        if (targetCaps.css3d) {
-          renderer = 'css3d';
-        } else {
-          // 即使性能低，如果没有 CSS3D 支持，仍然尝试 WebGL
-          logger.warn('compatibility', 'CSS3D 不支持，仍使用 WebGL 渲染器');
-          renderer = 'webgl';
-        }
-      } else {
-        renderer = 'webgl';
-      }
+      renderer = 'webgl';
     }
     // 2. 降级到 CSS3D
     else if (targetCaps.css3d) {

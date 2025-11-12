@@ -24,17 +24,7 @@
       缓冲中...
     </div>
 
-    <!-- 播放按钮（需要用户手势时显示） -->
-    <button
-      v-if="showPlayButton"
-      class="absolute inset-0 z-20 flex items-center justify-center bg-black/60 hover:bg-black/50 transition-colors"
-      style="min-width: 44px; min-height: 44px"
-      @click="handlePlayClick"
-    >
-      <div class="play-button-icon">
-        <div class="play-triangle"></div>
-      </div>
-    </button>
+    <!-- 播放按钮已全局禁用 -->
 
     <!-- WebGL 渲染器容器 -->
     <div
@@ -68,7 +58,6 @@
       playsinline
       webkit-playsinline
       x5-playsinline
-      x5-video-player-type="h5-page"
       preload="metadata"
       disableRemotePlayback
       crossorigin="anonymous"
@@ -748,10 +737,10 @@ onActivated(async () => {
     try {
       if (wasPlayingBeforeDeactivation || props.autoplay) {
         await videoRef.value.play();
-        interaction.hidePlayButton();
+        // 播放按钮已全局禁用
       }
     } catch {
-      interaction.displayPlayButton();
+      // 播放按钮已全局禁用
     }
   }
 });

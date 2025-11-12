@@ -40,16 +40,18 @@ export function useInteraction() {
    * 显示播放按钮
    */
   function displayPlayButton(): void {
-    showPlayButton.value = true;
-    logger.info('interaction', '显示播放按钮');
+    // 全平台禁用播放按钮显示
+    showPlayButton.value = false;
+    logger.info('interaction', '全平台禁用播放按钮显示');
   }
 
   /**
    * 隐藏播放按钮
    */
   function hidePlayButton(): void {
+    // 全平台始终保持隐藏
     showPlayButton.value = false;
-    logger.info('interaction', '隐藏播放按钮');
+    logger.info('interaction', '全平台：保持隐藏播放按钮');
   }
 
   /**
@@ -119,9 +121,8 @@ export function useInteraction() {
     } catch (error: any) {
       // 捕获 NotAllowedError 异常
       if (error.name === 'NotAllowedError') {
-        logger.warn('interaction', '自动播放被阻止，需要用户手势', error);
-        // 在任何浏览器中，如果自动播放被阻止，都显示播放按钮以引导用户点击
-        displayPlayButton();
+        logger.warn('interaction', '自动播放被阻止（已禁用播放按钮）', error);
+        // 全平台不显示播放按钮
         return false;
       } else {
         logger.error('interaction', '自动播放失败（非权限问题）', error);
