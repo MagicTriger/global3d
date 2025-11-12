@@ -34,8 +34,8 @@ export class WebGLRenderer implements Renderer {
   
   // 帧率限制相关
   private lastFrameTime = 0;
-  private readonly targetFPS = 60;
-  private readonly frameInterval: number;
+  private targetFPS = 60;
+  private frameInterval: number;
   private frameCount = 0;
   private fpsStartTime = 0;
   private currentFPS = 0;
@@ -83,6 +83,12 @@ export class WebGLRenderer implements Renderer {
         'renderer',
         `使用像素比: ${pixelRatio} (设备像素比: ${window.devicePixelRatio}, 性能:${devicePerf.performanceScore})`
       );
+
+      // 动态设置目标帧率：低性能设备 30fps，移动端 45fps，桌面 60fps
+      const baseFPS = devicePerf.performanceScore === 'low' ? 30 : isMobileDevice ? 45 : 60;
+      this.targetFPS = baseFPS;
+      this.frameInterval = 1000 / this.targetFPS;
+      logger.info('renderer', `目标帧率: ${this.targetFPS}fps`);
 
       // 将渲染器添加到容器
       this.container.appendChild(this.renderer.domElement);
@@ -333,7 +339,13 @@ export class WebGLRenderer implements Renderer {
       }
 
       // 非 rVFC 模式下，保证纹理按需更新（避免每帧强制更新导致卡顿）
-      if (this.videoTexture && this.videoElement && !this.useVideoFrameCallback) {
+      // 当未启用 requestVideoFrameCallback 且未使用定时器同步时才在渲染循环内更新纹理
+      if (
+        this.videoTexture &&
+        this.videoElement &&
+        !this.useVideoFrameCallback &&
+        this.videoFrameTimerId === null
+      ) {
         if (this.videoElement.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
           this.videoTexture.needsUpdate = true;
         }

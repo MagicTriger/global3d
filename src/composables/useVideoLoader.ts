@@ -109,9 +109,11 @@ export function useVideoLoader() {
 
     // Android 微信/X5 内核特定属性
     video.setAttribute('x5-playsinline', '');
-    video.setAttribute('x5-video-player-type', 'h5-page');
+    // 使用 h5 模式以提升内联播放兼容性
+    video.setAttribute('x5-video-player-type', 'h5');
     video.setAttribute('x5-video-player-fullscreen', 'false');
-    video.setAttribute('x5-video-orientation', 'portraint'); // 竖屏模式
+    // 修正拼写：portrait
+    video.setAttribute('x5-video-orientation', 'portrait'); // 竖屏模式
     
     // 微信浏览器特殊处理
     if (isWechatBrowser) {
@@ -128,8 +130,8 @@ export function useVideoLoader() {
       video.muted = true;
       video.defaultMuted = true;
     } else if (isBaiduBrowser) {
-      // 百度浏览器：保守策略，使用 metadata 预加载并要求用户手势
-      video.preload = 'metadata';
+      // 百度浏览器：在自动播放场景使用 auto 预加载，以加速首帧并减少黑屏
+      video.preload = cfg.autoplay ? 'auto' : 'metadata';
       video.muted = true;
       video.defaultMuted = true;
       logger.info('video', '百度浏览器：使用 metadata 预加载策略并保持静音');

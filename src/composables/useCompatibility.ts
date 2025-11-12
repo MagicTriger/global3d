@@ -123,6 +123,24 @@ export function useCompatibility() {
       return 'fallback';
     }
 
+    // 针对百度移动浏览器：优先使用 CSS3D，规避 WebGL+VideoTexture 黑屏问题
+    try {
+      const ua = navigator.userAgent || '';
+      const isBaiduBrowser = /Baidu|BIDUBrowser|baiduboxapp|SearchCraft/i.test(ua);
+      const isMobileDevice = isMobile();
+
+      if (isBaiduBrowser && isMobileDevice) {
+        if (targetCaps.css3d) {
+          selectedRenderer.value = 'css3d';
+          logger.info('compatibility', '检测到百度移动浏览器，强制使用 CSS3D 渲染器');
+          return 'css3d';
+        }
+        // 若不支持 CSS3D，则按能力继续选择（可能 WebGL 或 fallback）
+      }
+    } catch (e) {
+      // UA 解析异常不阻断流程
+    }
+
     let renderer: RendererType;
 
     // 1. 优先选择 WebGL（如果支持且性能良好）
