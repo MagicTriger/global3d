@@ -79,7 +79,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, defineOptions } from 'vue';
+import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { resolveAssetPath } from '../utils/env';
 
@@ -133,7 +133,6 @@ const backbagInlineStyle = {
 </script>
 
 <style scoped>
-
 /* ========== 全局防拖拽设置 ========== */
 
 /* 禁止所有图片被拖拽 */
@@ -696,5 +695,4 @@ img {
   }
 }
 </style>
-// 显式命名组件以支持 KeepAlive 精确缓存
-defineOptions({ name: 'Backbag' });
+// 显式命名组件以支持 KeepAlive 精确缓存 defineOptions({ name: 'Backbag' });

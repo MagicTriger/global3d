@@ -120,12 +120,8 @@ export function useInteraction() {
       // 捕获 NotAllowedError 异常
       if (error.name === 'NotAllowedError') {
         logger.warn('interaction', '自动播放被阻止，需要用户手势', error);
-        // 仅在 iOS 显示播放按钮；非 iOS 不显示按钮
-        if (isIOS()) {
-          displayPlayButton();
-        } else {
-          hidePlayButton();
-        }
+        // 在任何浏览器中，如果自动播放被阻止，都显示播放按钮以引导用户点击
+        displayPlayButton();
         return false;
       } else {
         logger.error('interaction', '自动播放失败（非权限问题）', error);

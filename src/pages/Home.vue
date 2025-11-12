@@ -3,9 +3,7 @@
     <PanoramaPlayer
       class="player w-full h-full bg-black"
       :poster="poster"
-      :low-src="lowQualityVideo"
       :mp4-src="mediumQualityVideo"
-      :high-src="highQualityVideo"
       :initial-pitch-deg="initialPitchDeg"
       :initial-yaw-deg="initialYawDeg"
       :initial-fov="initialFov"
@@ -13,7 +11,6 @@
       :muted="true"
       :loop="true"
     />
-    
 
     <!-- 移动端资源图片 -->
     <img
@@ -78,15 +75,12 @@ const BASE = import.meta.env.BASE_URL;
 // 视频源配置 - 默认从配置读取，可通过 env 统一注入
 const poster = BASE + 'vite.svg';
 const defaultVideo = getDefaultPanoramaVideoUrl();
-const lowQualityVideo = defaultVideo; // 低质量 MP4（默认同一路径，可按需区分）
-const mediumQualityVideo = defaultVideo; // 中等质量 MP4（默认同一路径，可按需区分）
-const highQualityVideo = defaultVideo; // 高质量视频（默认同一路径，可按需区分）
+const mediumQualityVideo = defaultVideo; // 默认使用 MP4(H.264) 源
 
 // 初始视角配置
 const initialPitchDeg = 20; // 略向下以鸟瞰效果
 const initialYawDeg = 0; // 初始水平角度
 const initialFov = 75; // 初始视场角
-
 
 /**
  * 切换右上角装饰图片显示
@@ -101,7 +95,6 @@ const toggleDecoration = () => {
 const openBackbag = () => {
   router.push('/backbag');
 };
-
 </script>
 
 <style scoped>

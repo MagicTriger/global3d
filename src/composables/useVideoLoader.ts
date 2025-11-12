@@ -84,15 +84,22 @@ export function useVideoLoader() {
    * 优化 iOS、Android 和微信兼容性
    */
   function setupVideoAttributes(video: HTMLVideoElement, cfg: VideoLoaderConfig): void {
+    const ua = navigator.userAgent || '';
+    const isWechatBrowser = /MicroMessenger/i.test(ua);
+    const isBaiduBrowser = /Baidu|BIDUBrowser|baiduboxapp|SearchCraft/i.test(ua);
+
     // 基本属性
     video.autoplay = cfg.autoplay;
-    video.muted = cfg.muted;
+    // 为确保自动播放与内联渲染，在移动端强制静音
+    video.muted = true;
+    video.defaultMuted = true;
     video.loop = cfg.loop;
     video.playsInline = true;
 
     // iOS 特定属性 - 确保内联播放，防止全屏
     video.setAttribute('playsinline', '');
     video.setAttribute('webkit-playsinline', '');
+    video.setAttribute('muted', '');
 
     // iOS 自动播放要求：必须静音
     if (cfg.autoplay && !cfg.muted) {
@@ -107,7 +114,6 @@ export function useVideoLoader() {
     video.setAttribute('x5-video-orientation', 'portraint'); // 竖屏模式
     
     // 微信浏览器特殊处理
-    const isWechatBrowser = /MicroMessenger/i.test(navigator.userAgent);
     if (isWechatBrowser) {
       // 微信浏览器必须使用 metadata 预加载，auto 会导致卡住
       video.preload = 'metadata';
@@ -121,10 +127,15 @@ export function useVideoLoader() {
       // 确保静音（微信要求）
       video.muted = true;
       video.defaultMuted = true;
+    } else if (isBaiduBrowser) {
+      // 百度浏览器：保守策略，使用 metadata 预加载并要求用户手势
+      video.preload = 'metadata';
+      video.muted = true;
+      video.defaultMuted = true;
+      logger.info('video', '百度浏览器：使用 metadata 预加载策略并保持静音');
     } else if (isIOS()) {
       // iOS 优化：自动播放时使用 auto 预加载；同时默认静音与禁用远程播放
       video.preload = cfg.autoplay ? 'auto' : 'metadata';
-      video.defaultMuted = true;
       video.setAttribute('disableRemotePlayback', '');
       logger.info('video', `iOS 设备：使用 ${video.preload} 预加载策略`);
     } else {
@@ -344,8 +355,12 @@ export function useVideoLoader() {
     video: HTMLVideoElement,
     quality: VideoQuality
   ): Promise<void> {
-    // 按优先级尝试不同格式：HLS -> MP4 -> WebM
-    const formatOrder: Array<'hls' | 'mp4' | 'webm'> = ['hls', 'mp4', 'webm'];
+    // 在 iOS/百度浏览器/移动端优先尝试 MP4（H.264），兼容性更好
+    const ua = navigator.userAgent || '';
+    const preferMP4 = isIOS() || /Baidu|BIDUBrowser|baiduboxapp|SearchCraft/i.test(ua) || /Mobile|Android/i.test(ua);
+    const formatOrder: Array<'hls' | 'mp4' | 'webm'> = preferMP4
+      ? ['mp4', 'hls', 'webm']
+      : ['hls', 'mp4', 'webm'];
 
     for (const format of formatOrder) {
       const source = sources.find((s) => s.type === format && s.quality === quality);
@@ -359,6 +374,14 @@ export function useVideoLoader() {
       if (format === 'hls' && !isHlsSupported()) {
         logger.info('video', '跳过 HLS（浏览器不支持）');
         continue;
+      }
+      if (format === 'mp4') {
+        // 检查 H.264/AAC 支持
+        const support = video.canPlayType('video/mp4; codecs="avc1.42E01E, mp4a.40.2"');
+        if (!support) {
+          logger.info('video', '跳过 MP4（浏览器声明不支持 H.264/AAC）');
+          continue;
+        }
       }
 
       try {

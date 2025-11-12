@@ -68,9 +68,10 @@
       playsinline
       webkit-playsinline
       x5-playsinline
-      x5-video-player-type="h5"
+      x5-video-player-type="h5-page"
       preload="metadata"
       disableRemotePlayback
+      crossorigin="anonymous"
     ></video>
 
     <!-- 错误提示 -->
@@ -730,11 +731,7 @@ async function attemptResumePlayback() {
     loadingMessage.value = '';
   } catch {
     // 若仍被策略拦截，显示播放按钮引导用户点击
-    if (isIOS()) {
-      interaction.displayPlayButton();
-    } else {
-      interaction.hidePlayButton();
-    }
+    interaction.displayPlayButton();
   }
 }
 // 激活时恢复播放与渲染器挂载
@@ -754,11 +751,7 @@ onActivated(async () => {
         interaction.hidePlayButton();
       }
     } catch {
-      if (isIOS()) {
-        interaction.displayPlayButton();
-      } else {
-        interaction.hidePlayButton();
-      }
+      interaction.displayPlayButton();
     }
   }
 });

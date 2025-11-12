@@ -1,28 +1,11 @@
 <template>
-  <div 
-    class="legal-circulation-container"
-    @keydown="handleKeyDown"
-  >
+  <div class="legal-circulation-container" @keydown="handleKeyDown">
     <!-- Background Image Layer -->
-    <img 
-      src="/images/fawu/mobile/组 1.png" 
-      alt=""
-      class="background-image"
-      aria-hidden="true"
-    />
+    <img src="/images/fawu/mobile/组 1.png" alt="" class="background-image" aria-hidden="true" />
     <!-- Back Button -->
     <div class="back-button-container">
-      <button 
-        class="back-button"
-        @click="handleBack"
-        aria-label="返回背包页面"
-      >
-        <img 
-          src="/images/fawu/mobile/图层 4.png" 
-          alt="" 
-          aria-hidden="true"
-          draggable="false"
-        />
+      <button class="back-button" @click="handleBack" aria-label="返回背包页面">
+        <img src="/images/fawu/mobile/图层 4.png" alt="" aria-hidden="true" draggable="false" />
       </button>
       <span class="back-text">返回</span>
     </div>
@@ -31,83 +14,55 @@
       <div class="title-container">
         <h1 class="page-title">法物流通</h1>
       </div>
-      <img 
-        src="/images/fawu/mobile/太极.png" 
+      <img
+        src="/images/fawu/mobile/太极.png"
         alt=""
         class="taiji-icon"
         aria-hidden="true"
         draggable="false"
       />
-            <div class="tabs-container">
-        <div 
-          class="tab-item" 
-          :class="{ active: activeTab === 0 }"
-          @click="handleTabClick(0)"
-        >
-          <img 
-            src="/images/fawu/mobile/price-bg.png" 
-            alt=""
-            class="tab-bg"
-            aria-hidden="true"
-          />
+      <div class="tabs-container">
+        <div class="tab-item" :class="{ active: activeTab === 0 }" @click="handleTabClick(0)">
+          <img src="/images/fawu/mobile/price-bg.png" alt="" class="tab-bg" aria-hidden="true" />
           <span class="tab-text-cn">香</span>
           <span class="tab-text-en">INCENSE</span>
-          <img 
-            src="/images/fawu/mobile/矩形 2.png" 
+          <img
+            src="/images/fawu/mobile/矩形 2.png"
             alt=""
             class="tab-indicator"
             aria-hidden="true"
           />
         </div>
-        <div 
-          class="tab-item"
-          :class="{ active: activeTab === 1 }"
-          @click="handleTabClick(1)"
-        >
-          <img 
-            src="/images/fawu/mobile/price-bg.png" 
-            alt=""
-            class="tab-bg"
-            aria-hidden="true"
-          />
+        <div class="tab-item" :class="{ active: activeTab === 1 }" @click="handleTabClick(1)">
+          <img src="/images/fawu/mobile/price-bg.png" alt="" class="tab-bg" aria-hidden="true" />
           <span class="tab-text-cn">贡品</span>
           <span class="tab-text-en">TRIBUTE</span>
-          <img 
-            src="/images/fawu/mobile/矩形 2.png" 
+          <img
+            src="/images/fawu/mobile/矩形 2.png"
             alt=""
             class="tab-indicator"
             aria-hidden="true"
           />
         </div>
-        <div 
-          class="tab-item"
-          :class="{ active: activeTab === 2 }"
-          @click="handleTabClick(2)"
-        >
-          <img 
-            src="/images/fawu/mobile/price-bg.png" 
-            alt=""
-            class="tab-bg"
-            aria-hidden="true"
-          />
+        <div class="tab-item" :class="{ active: activeTab === 2 }" @click="handleTabClick(2)">
+          <img src="/images/fawu/mobile/price-bg.png" alt="" class="tab-bg" aria-hidden="true" />
           <span class="tab-text-cn">其它</span>
           <span class="tab-text-en">OTHER ITEMS</span>
-          <img 
-            src="/images/fawu/mobile/矩形 2.png" 
+          <img
+            src="/images/fawu/mobile/矩形 2.png"
             alt=""
             class="tab-indicator"
             aria-hidden="true"
           />
         </div>
       </div>
-      <img 
-        src="/images/fawu/mobile/椭圆 1 拷贝 3.png" 
+      <img
+        src="/images/fawu/mobile/椭圆 1 拷贝 3.png"
         alt=""
         class="divider-line"
         aria-hidden="true"
         draggable="false"
       />
-
     </div>
 
     <!-- Content Scroll Area -->
@@ -115,16 +70,16 @@
       <div class="items-grid">
         <!-- Item Card 1 -->
         <div class="item-card">
-          <img 
-            src="/images/fawu/mobile/incense-1.png" 
+          <img
+            src="/images/fawu/mobile/incense-1.png"
             alt="平安香"
             class="card-image"
             draggable="false"
           />
           <div class="item-tooltip">平安香</div>
           <div class="price-box">
-            <img 
-              src="/images/fawu/mobile/incense-4.png" 
+            <img
+              src="/images/fawu/mobile/incense-4.png"
               alt=""
               class="price-box-bg"
               draggable="false"
@@ -136,16 +91,16 @@
 
         <!-- Item Card 2 -->
         <div class="item-card">
-          <img 
-            src="/images/fawu/mobile/incense-2.png" 
+          <img
+            src="/images/fawu/mobile/incense-2.png"
             alt="求财香"
             class="card-image"
             draggable="false"
           />
           <div class="item-tooltip">求财香</div>
           <div class="price-box">
-            <img 
-              src="/images/fawu/mobile/incense-4.png" 
+            <img
+              src="/images/fawu/mobile/incense-4.png"
               alt=""
               class="price-box-bg"
               draggable="false"
@@ -157,16 +112,16 @@
 
         <!-- Item Card 3 -->
         <div class="item-card">
-          <img 
-            src="/images/fawu/mobile/incense-3.png" 
+          <img
+            src="/images/fawu/mobile/incense-3.png"
             alt="富贵香"
             class="card-image"
             draggable="false"
           />
           <div class="item-tooltip">富贵香</div>
           <div class="price-box">
-            <img 
-              src="/images/fawu/mobile/incense-4.png" 
+            <img
+              src="/images/fawu/mobile/incense-4.png"
               alt=""
               class="price-box-bg"
               draggable="false"
@@ -178,16 +133,16 @@
 
         <!-- Item Card 4 -->
         <div class="item-card">
-          <img 
-            src="/images/fawu/mobile/incense-5.png" 
+          <img
+            src="/images/fawu/mobile/incense-5.png"
             alt="长生香"
             class="card-image"
             draggable="false"
           />
           <div class="item-tooltip">长生香</div>
           <div class="price-box">
-            <img 
-              src="/images/fawu/mobile/incense-4.png" 
+            <img
+              src="/images/fawu/mobile/incense-4.png"
               alt=""
               class="price-box-bg"
               draggable="false"
@@ -199,16 +154,16 @@
 
         <!-- Item Card 5 -->
         <div class="item-card">
-          <img 
-            src="/images/fawu/mobile/incense-6.png" 
+          <img
+            src="/images/fawu/mobile/incense-6.png"
             alt="姻缘香"
             class="card-image"
             draggable="false"
           />
           <div class="item-tooltip">姻缘香</div>
           <div class="price-box">
-            <img 
-              src="/images/fawu/mobile/incense-4.png" 
+            <img
+              src="/images/fawu/mobile/incense-4.png"
               alt=""
               class="price-box-bg"
               draggable="false"
@@ -219,13 +174,11 @@
         </div>
       </div>
     </div>
-
-
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, defineOptions } from 'vue';
+import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 
 const router = useRouter();
@@ -269,7 +222,7 @@ const handleKeyDown = (event: KeyboardEvent): void => {
   width: 100vw;
   height: 100vh;
   overflow: hidden;
-  
+
   /* User Interaction Protection */
   user-select: none;
   -webkit-user-select: none;
@@ -277,7 +230,7 @@ const handleKeyDown = (event: KeyboardEvent): void => {
   -ms-user-select: none;
   -webkit-touch-callout: none;
   touch-action: pan-y;
-  
+
   /* Page Enter Animation */
   animation: slideIn 0.3s ease;
 }
@@ -331,7 +284,7 @@ const handleKeyDown = (event: KeyboardEvent): void => {
   font-size: 48px;
   font-weight: 700;
   letter-spacing: 2px;
-  background: linear-gradient(180deg, #FBE3C9FF 0%, #FFFFFF 100%);
+  background: linear-gradient(180deg, #fbe3c9ff 0%, #ffffff 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -965,5 +918,4 @@ const handleKeyDown = (event: KeyboardEvent): void => {
   }
 }
 </style>
-// 显式命名组件以支持 KeepAlive 精确缓存
-defineOptions({ name: 'LegalCirculation' });
+// 显式命名组件以支持 KeepAlive 精确缓存 defineOptions({ name: 'LegalCirculation' });
