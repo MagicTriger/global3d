@@ -55,11 +55,10 @@
       :muted="muted"
       :autoplay="autoplay"
       :loop="loop"
+      preload="metadata"
       playsinline
       webkit-playsinline
       x5-playsinline
-      preload="metadata"
-      disableRemotePlayback
       crossorigin="anonymous"
     ></video>
 
@@ -78,13 +77,7 @@
       </button>
     </div>
 
-    <!-- 降级提示 -->
-    <div
-      v-if="showDegradationNotice"
-      class="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-yellow-600/90 text-white px-4 py-2 rounded text-sm z-10"
-    >
-      {{ degradationMessage }}
-    </div>
+    
   </div>
 </template>
 
@@ -99,13 +92,11 @@ import {
   nextTick,
 } from 'vue';
 import type { VideoSource } from '../types/panorama';
-import { useCompatibility } from '../composables/useCompatibility';
 import { useRenderer } from '../composables/useRenderer';
+import { useCompatibility } from '../composables/useCompatibility';
 import { useVideoLoader } from '../composables/useVideoLoader';
-import { useInteraction } from '../composables/useInteraction';
 import logger from '../utils/logger';
-import memoryMonitor from '../utils/memoryMonitor';
-import { isIOS } from '../utils/env';
+ 
 
 // Props 定义
 interface Props {
@@ -146,34 +137,31 @@ const emit = defineEmits<{
 }>();
 
 // 使用 Composables
-const compatibility = useCompatibility();
 const rendererManager = useRenderer();
 const videoLoader = useVideoLoader();
-const interaction = useInteraction();
+const compatibility = useCompatibility();
+ 
 
 // 模板引用
 const rootRef = ref<HTMLElement | null>(null);
 const videoRef = ref<HTMLVideoElement | null>(null);
 const webglContainerRef = ref<HTMLElement | null>(null);
-const css3dContainerRef = ref<HTMLElement | null>(null);
-const fallbackContainerRef = ref<HTMLElement | null>(null);
+ 
 
 // 组件状态
 const isLoading = ref(true); // 恢复自动加载
 const loadingMessage = ref('正在初始化...');
 const errorMessage = ref<string | null>(null);
 const canRetry = ref(false);
-const showDegradationNotice = ref(false);
-const degradationMessage = ref('');
+ 
 const isBuffering = ref(false);
 const loadingProgress = ref(0);
 
 // 计算属性
-const showPlayButton = computed(() => interaction.showPlayButton.value);
+ 
 const currentRendererType = computed(() => rendererManager.currentType.value);
 // iOS/第三方浏览器兜底：首次触摸与页面可见时再尝试播放
-let iosGestureListener: ((e: Event) => void) | null = null;
-let visibilityListener: ((e: Event) => void) | null = null;
+ 
 let wasPlayingBeforeDeactivation = false;
 // 清理函数引用
 let loopCleanup: (() => void) | undefined;
@@ -263,7 +251,7 @@ async function handlePlayClick() {
       isLoading.value = false;
     }
 
-    await interaction.handlePlayButtonClick(video);
+    
   } catch (error) {
     logger.error('interaction', '播放按钮点击处理失败', error);
     isLoading.value = false;
@@ -289,35 +277,17 @@ async function handleRetry() {
 async function initializePlayer() {
   try {
     // 微信浏览器检测
-    const isWechatBrowser = /MicroMessenger/i.test(navigator.userAgent);
-    if (isWechatBrowser) {
-      logger.info('renderer', '检测到微信浏览器环境');
-    }
+    
 
     logger.info('renderer', '开始初始化全景播放器');
     isLoading.value = true;
     loadingProgress.value = 10; // 初始进度
-    loadingMessage.value = '正在检测浏览器能力...';
-
-    // 步骤 1: 执行兼容性检测（关键路径）
-    const capabilities = await compatibility.detectCapabilities();
-    loadingProgress.value = 20; // 兼容性检测完成
-    logger.info('compatibility', '兼容性检测完成', capabilities);
-
-    // 步骤 2: 根据检测结果选择渲染器（关键路径）
     loadingMessage.value = '正在选择渲染器...';
     loadingProgress.value = 25;
-    const selectedRendererType = compatibility.selectRenderer(capabilities);
+    const selectedRendererType = compatibility.selectRenderer();
     logger.info('renderer', `选择的渲染器: ${selectedRendererType}`);
 
-    // 显示降级提示
-    if (selectedRendererType === 'css3d') {
-      showDegradationNotice.value = true;
-      degradationMessage.value = '您的浏览器不支持 WebGL，使用简化渲染模式';
-    } else if (selectedRendererType === 'fallback') {
-      showDegradationNotice.value = true;
-      degradationMessage.value = '您的浏览器功能受限，使用基础显示模式';
-    }
+    
 
     // 步骤 3: 获取渲染器容器
     let container: HTMLElement | null = null;
@@ -325,7 +295,7 @@ async function initializePlayer() {
       container = webglContainerRef.value;
     } else if (selectedRendererType === 'css3d') {
       container = css3dContainerRef.value;
-    } else if (selectedRendererType === 'fallback') {
+    } else {
       container = fallbackContainerRef.value;
     }
 
@@ -404,23 +374,14 @@ async function initializePlayer() {
       }
 
       loadingProgress.value = 90;
-      const autoplaySuccess = await interaction.tryAutoplay(videoRef.value);
-
-      if (!autoplaySuccess) {
-        logger.info('interaction', '自动播放失败，显示播放按钮（视频已预加载）');
-        // 播放按钮已由 interaction.tryAutoplay 自动显示
-        // 此时视频已经预加载，用户点击后会立即播放
-      } else {
-        logger.info('interaction', '自动播放成功');
-      }
+      try {
+        await videoRef.value.play();
+      } catch {}
     }
 
     // 步骤 8: 启用触摸控制（如果有渲染器）
     loadingProgress.value = 95;
-    if (rendererManager.currentRenderer.value && rootRef.value) {
-      interaction.enableTouchControls(rootRef.value, rendererManager.currentRenderer.value);
-      logger.info('interaction', '触摸控制已启用');
-    }
+    
 
     // 步骤 9: 监听视频播放事件，隐藏加载状态
     if (videoRef.value) {
@@ -431,10 +392,7 @@ async function initializePlayer() {
       let readyEventEmitted = false;
 
       // 微信浏览器检测
-      const isWechatBrowser = /MicroMessenger/i.test(navigator.userAgent);
-
-      // 微信浏览器需要更长的超时时间（3秒），因为加载较慢
-      const timeoutDuration = isWechatBrowser ? 3000 : 1000;
+      const timeoutDuration = 1000;
 
       // 设置超时机制：如果超时没有触发事件，强制显示内容
       const forceShowTimeout = setTimeout(() => {
@@ -683,10 +641,6 @@ async function reattachRendererIfNeeded() {
   let container: HTMLElement | null = null;
   if (type === 'webgl') {
     container = webglContainerRef.value;
-  } else if (type === 'css3d') {
-    container = css3dContainerRef.value;
-  } else {
-    container = fallbackContainerRef.value;
   }
   if (!container) return;
 
@@ -707,26 +661,24 @@ async function reattachRendererIfNeeded() {
     rendererManager.currentRenderer.value?.onVideoReady(videoRef.value!);
   }
 
-  if (rootRef.value && rendererManager.currentRenderer.value) {
-    interaction.enableTouchControls(rootRef.value, rendererManager.currentRenderer.value);
-  }
+  
 }
 async function attemptResumePlayback() {
   if (!videoRef.value) return;
   try {
     await videoRef.value.play();
-    interaction.hidePlayButton();
+    
     isLoading.value = false;
     loadingMessage.value = '';
   } catch {
     // 若仍被策略拦截，显示播放按钮引导用户点击
-    interaction.displayPlayButton();
+    
   }
 }
 // 激活时恢复播放与渲染器挂载
 onActivated(async () => {
   await nextTick();
-  memoryMonitor.startMonitoring(10000);
+  
   isLoading.value = false;
   isBuffering.value = false;
   loadingMessage.value = '';
@@ -747,10 +699,10 @@ onActivated(async () => {
 
 // 停用时暂停并记录状态
 onDeactivated(() => {
-  memoryMonitor.stopMonitoring();
-  if (rootRef.value) {
-    interaction.disableTouchControls(rootRef.value);
-  }
+  
+    if (rootRef.value) {
+      
+    }
   if (videoRef.value) {
     wasPlayingBeforeDeactivation = !videoRef.value.paused;
     videoRef.value.pause();
@@ -772,42 +724,13 @@ defineExpose({
 
 onMounted(async () => {
   // 启动内存监控
-  memoryMonitor.startMonitoring(10000); // 每 10 秒检查一次
-  memoryMonitor.setLowMemoryCallback(() => {
-    logger.warn('memory', '检测到内存不足，尝试降级视频质量');
-    // 如果当前不是低质量，尝试切换到低质量
-    if (videoLoader.currentQuality.value !== 'low') {
-      videoLoader.switchQuality('low').catch((error) => {
-        logger.error('memory', '降级视频质量失败', error);
-      });
-    }
-  });
+  
 
   // 自动初始化播放器
   await initializePlayer();
 
   // iOS：一次性触摸事件触发播放，避免策略拦截
-  if (isIOS()) {
-    iosGestureListener = async () => {
-      await attemptResumePlayback();
-      if (iosGestureListener) {
-        document.removeEventListener('touchstart', iosGestureListener as EventListener);
-        iosGestureListener = null;
-      }
-    };
-    document.addEventListener('touchstart', iosGestureListener as EventListener, {
-      once: true,
-      passive: true,
-    });
-
-    // 页面变为可见时再尝试一次播放（从后台返回或切换标签）
-    visibilityListener = async () => {
-      if (!document.hidden) {
-        await attemptResumePlayback();
-      }
-    };
-    document.addEventListener('visibilitychange', visibilityListener as EventListener);
-  }
+  
 });
 
 onBeforeUnmount(() => {
@@ -815,13 +738,12 @@ onBeforeUnmount(() => {
 
   try {
     // 0. 停止内存监控
-    memoryMonitor.stopMonitoring();
+  
     logger.info('memory', '内存监控已停止');
 
     // 1. 禁用触摸控制
     if (rootRef.value) {
-      interaction.disableTouchControls(rootRef.value);
-      logger.info('interaction', '触摸控制已禁用');
+      
     }
 
     // 2. 销毁渲染器（及时释放纹理和几何体）
@@ -860,7 +782,7 @@ onBeforeUnmount(() => {
     }
 
     // 7. 记录最终内存状态
-    memoryMonitor.logMemoryInfo();
+  
 
     logger.info('renderer', '全景播放器资源清理完成');
   } catch (error) {
@@ -868,14 +790,8 @@ onBeforeUnmount(() => {
   }
 
   // 清理 iOS 回退播放监听器
-  if (iosGestureListener) {
-    document.removeEventListener('touchstart', iosGestureListener as EventListener);
-    iosGestureListener = null;
-  }
-  if (visibilityListener) {
-    document.removeEventListener('visibilitychange', visibilityListener as EventListener);
-    visibilityListener = null;
-  }
+  
+  
 });
 </script>
 

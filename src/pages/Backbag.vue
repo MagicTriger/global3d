@@ -81,7 +81,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { resolveAssetPath } from '../utils/env';
+ 
 
 /**
  * 背包页面脚本
@@ -127,8 +127,9 @@ const handleTradeClick = () => {
 };
 
 // 背景图使用 CDN 路径，避免默认 /images 加载慢
+const BASE = import.meta.env.BASE_URL;
 const backbagInlineStyle = {
-  backgroundImage: `url(${resolveAssetPath('images/backbag/底图.png')})`,
+  backgroundImage: `url(${BASE}images/backbag/底图.png)`,
 };
 </script>
 

@@ -8,7 +8,6 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { Renderer, RendererConfig } from '../types/panorama';
 import logger from '../utils/logger';
 import { getOptimalPixelRatio } from '../utils/performance';
-import { assessDevicePerformance } from '../utils/env';
 
 export class WebGLRenderer implements Renderer {
   private scene: THREE.Scene | null = null;
@@ -21,28 +20,8 @@ export class WebGLRenderer implements Renderer {
   private videoElement: HTMLVideoElement | null = null;
   private animationFrameId: number | null = null;
   private isDisposed = false;
-  private contextLostHandler: ((event: Event) => void) | null = null;
-  private contextRestoredHandler: ((event: Event) => void) | null = null;
-  private onContextLostCallback: (() => void) | null = null;
-  private resizeObserver: ResizeObserver | null = null;
-  private orientationChangeHandler: (() => void) | null = null;
-  private resizeTimeout: number | null = null;
-  // 视频帧同步相关
-  private useVideoFrameCallback = false;
-  private videoFrameCallbackId: number | null = null;
-  private videoFrameTimerId: number | null = null;
-  
-  // 帧率限制相关
-  private lastFrameTime = 0;
-  private targetFPS = 60;
-  private frameInterval: number;
-  private frameCount = 0;
-  private fpsStartTime = 0;
-  private currentFPS = 0;
 
-  constructor() {
-    this.frameInterval = 1000 / this.targetFPS;
-  }
+  constructor() {}
 
   /**
    * 初始化 WebGL 渲染器
@@ -63,43 +42,23 @@ export class WebGLRenderer implements Renderer {
       this.camera.position.set(0, 0, 0);
 
       // 创建渲染器
-      this.renderer = new THREE.WebGLRenderer({
-        antialias: true,
-        alpha: false,
-        powerPreference: 'high-performance', // 优先使用高性能 GPU
-      });
+      this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
       this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
-
-      // 限制设备像素比以优化性能（根据设备性能与平台动态限制）
-      const devicePerf = assessDevicePerformance();
-      const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
         navigator.userAgent
       );
-      const maxPixelRatio = devicePerf.performanceScore === 'low' ? 1.25 : isMobileDevice ? 1.5 : 2;
-      const pixelRatio = getOptimalPixelRatio(maxPixelRatio);
+      const pixelRatio = getOptimalPixelRatio(isMobile ? 1.5 : 2);
       this.renderer.setPixelRatio(pixelRatio);
-
-      logger.info(
-        'renderer',
-        `使用像素比: ${pixelRatio} (设备像素比: ${window.devicePixelRatio}, 性能:${devicePerf.performanceScore})`
-      );
-
-      // 动态设置目标帧率：低性能设备 30fps，移动端 45fps，桌面 60fps
-      const baseFPS = devicePerf.performanceScore === 'low' ? 30 : isMobileDevice ? 45 : 60;
-      this.targetFPS = baseFPS;
-      this.frameInterval = 1000 / this.targetFPS;
-      logger.info('renderer', `目标帧率: ${this.targetFPS}fps`);
 
       // 将渲染器添加到容器
       this.container.appendChild(this.renderer.domElement);
 
-      // 创建内翻球体几何体（根据设备性能调整分段数）
-      // 移动端使用更低的分段数以提升性能
-      const segments = devicePerf.performanceScore === 'low' ? 16 : isMobileDevice ? 24 : 32; // 低性能16段，移动端24段，桌面32段
+      // 创建内翻球体几何体
+      const segments = isMobile ? 24 : 32;
       const geometry = new THREE.SphereGeometry(500, segments, segments);
       geometry.scale(-1, 1, 1); // 内翻球体
 
-      logger.info('renderer', `球体分段数: ${segments} (${isMobileDevice ? '移动端' : '桌面端'})`);
+      logger.info('renderer', `球体分段数: ${segments}`);
 
       // 创建初始材质：优先使用 poster 作为占位纹理，提升首屏可见性
       let material: THREE.MeshBasicMaterial;
@@ -138,11 +97,12 @@ export class WebGLRenderer implements Renderer {
       // 初始化触摸控制
       this.initControls();
 
-      // 设置 WebGL 上下文丢失处理
-      this.setupContextLossHandling();
-
-      // 设置响应式尺寸调整
-      this.setupResponsiveResize();
+      // 设置尺寸调整（简单窗口 resize）
+      window.addEventListener('resize', () => {
+        if (this.container && this.renderer && this.camera) {
+          this.resize(this.container.clientWidth, this.container.clientHeight);
+        }
+      });
 
       // 启动渲染循环
       this.startRenderLoop();
@@ -157,57 +117,7 @@ export class WebGLRenderer implements Renderer {
   /**
    * 设置 WebGL 上下文丢失处理
    */
-  private setupContextLossHandling(): void {
-    if (!this.renderer) return;
-
-    const canvas = this.renderer.domElement;
-
-    // 监听上下文丢失事件
-    this.contextLostHandler = (event: Event) => {
-      event.preventDefault();
-      logger.warn('renderer', 'WebGL context lost');
-
-      // 停止渲染循环
-      this.stopRenderLoop();
-
-      // 通知外部需要降级
-      if (this.onContextLostCallback) {
-        this.onContextLostCallback();
-      }
-    };
-
-    // 监听上下文恢复事件
-    this.contextRestoredHandler = () => {
-      logger.info('renderer', 'WebGL context restored, attempting to recover');
-
-      try {
-        // 尝试恢复渲染
-        if (this.renderer && this.scene && this.camera) {
-          // 重新启动渲染循环
-          this.startRenderLoop();
-
-          // 如果有视频纹理，尝试重新绑定
-          if (this.videoElement && this.videoTexture) {
-            this.videoTexture.needsUpdate = true;
-          }
-
-          logger.info('renderer', 'WebGL context recovered successfully');
-        }
-      } catch (error) {
-        logger.error('renderer', 'Failed to recover WebGL context', error);
-
-        // 恢复失败，触发降级
-        if (this.onContextLostCallback) {
-          this.onContextLostCallback();
-        }
-      }
-    };
-
-    canvas.addEventListener('webglcontextlost', this.contextLostHandler);
-    canvas.addEventListener('webglcontextrestored', this.contextRestoredHandler);
-
-    logger.info('renderer', 'WebGL context loss handling set up');
-  }
+  private setupContextLossHandling(): void {}
 
   /**
    * 设置上下文丢失回调
@@ -220,50 +130,7 @@ export class WebGLRenderer implements Renderer {
   /**
    * 设置响应式尺寸调整
    */
-  private setupResponsiveResize(): void {
-    if (!this.container) return;
-
-    logger.info('renderer', 'Setting up responsive resize');
-
-    // 使用 ResizeObserver 监听容器尺寸变化
-    this.resizeObserver = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        // 使用防抖避免频繁调整
-        if (this.resizeTimeout !== null) {
-          clearTimeout(this.resizeTimeout);
-        }
-
-        this.resizeTimeout = window.setTimeout(() => {
-          const { width, height } = entry.contentRect;
-          if (width > 0 && height > 0) {
-            this.resize(width, height);
-          }
-        }, 100); // 100ms 防抖
-      }
-    });
-
-    this.resizeObserver.observe(this.container);
-
-    // 监听屏幕方向变化
-    this.orientationChangeHandler = () => {
-      logger.info('renderer', 'Screen orientation changed');
-
-      // 延迟调整以等待布局完成
-      setTimeout(() => {
-        if (this.container) {
-          this.resize(this.container.clientWidth, this.container.clientHeight);
-        }
-      }, 300);
-    };
-
-    // 监听 orientationchange 事件（移动端）
-    window.addEventListener('orientationchange', this.orientationChangeHandler);
-
-    // 也监听 resize 事件作为后备
-    window.addEventListener('resize', this.orientationChangeHandler);
-
-    logger.info('renderer', 'Responsive resize set up');
-  }
+  private setupResponsiveResize(): void {}
 
   /**
    * 初始化触摸控制
@@ -313,67 +180,24 @@ export class WebGLRenderer implements Renderer {
    * 启动渲染循环（带帧率限制）
    */
   private startRenderLoop(): void {
-    this.lastFrameTime = performance.now();
-    this.fpsStartTime = this.lastFrameTime;
-    this.frameCount = 0;
-
-    const animate = (currentTime: number) => {
+    const animate = () => {
       if (this.isDisposed) return;
-
       this.animationFrameId = requestAnimationFrame(animate);
 
-      // 计算距离上一帧的时间
-      const deltaTime = currentTime - this.lastFrameTime;
-
-      // 帧率限制：如果距离上一帧时间小于目标帧间隔，跳过本帧
-      if (deltaTime < this.frameInterval) {
-        return;
-      }
-
-      // 更新上一帧时间（考虑余数以保持精确的帧率）
-      this.lastFrameTime = currentTime - (deltaTime % this.frameInterval);
-
-      // 更新控制器
       if (this.controls) {
         this.controls.update();
       }
 
-      // 非 rVFC 模式下，保证纹理按需更新（避免每帧强制更新导致卡顿）
-      // 当未启用 requestVideoFrameCallback 且未使用定时器同步时才在渲染循环内更新纹理
-      if (
-        this.videoTexture &&
-        this.videoElement &&
-        !this.useVideoFrameCallback &&
-        this.videoFrameTimerId === null
-      ) {
-        if (this.videoElement.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-          this.videoTexture.needsUpdate = true;
-        }
+      if (this.videoTexture && this.videoElement) {
+        this.videoTexture.needsUpdate = true;
       }
 
-      // 渲染场景
       if (this.renderer && this.scene && this.camera) {
         this.renderer.render(this.scene, this.camera);
       }
-
-      // 计算实际 FPS（每秒更新一次）
-      this.frameCount++;
-      const fpsElapsed = currentTime - this.fpsStartTime;
-      if (fpsElapsed >= 1000) {
-        this.currentFPS = Math.round((this.frameCount * 1000) / fpsElapsed);
-        logger.info('renderer', `实际 FPS: ${this.currentFPS}`);
-        
-        // 如果 FPS 异常高，记录警告
-        if (this.currentFPS > 100) {
-          logger.warn('renderer', `检测到异常高的 FPS: ${this.currentFPS}，帧率限制可能未生效`);
-        }
-        
-        this.frameCount = 0;
-        this.fpsStartTime = currentTime;
-      }
     };
 
-    animate(this.lastFrameTime);
+    this.animationFrameId = requestAnimationFrame(animate);
   }
 
   /**
@@ -397,22 +221,7 @@ export class WebGLRenderer implements Renderer {
     // 停止渲染循环
     this.stopRenderLoop();
 
-    // 清理 resize 相关资源
-    if (this.resizeObserver) {
-      this.resizeObserver.disconnect();
-      this.resizeObserver = null;
-    }
-
-    if (this.resizeTimeout !== null) {
-      clearTimeout(this.resizeTimeout);
-      this.resizeTimeout = null;
-    }
-
-    if (this.orientationChangeHandler) {
-      window.removeEventListener('orientationchange', this.orientationChangeHandler);
-      window.removeEventListener('resize', this.orientationChangeHandler);
-      this.orientationChangeHandler = null;
-    }
+    // 清理 resize 相关资源（无）
 
     // 销毁控制器
     if (this.controls) {
@@ -426,21 +235,7 @@ export class WebGLRenderer implements Renderer {
       this.videoTexture = null;
     }
 
-    // 清理视频帧同步
-    if (this.videoElement) {
-      const v = this.videoElement as any;
-      if (this.useVideoFrameCallback && typeof v.cancelVideoFrameCallback === 'function' && this.videoFrameCallbackId !== null) {
-        try {
-          v.cancelVideoFrameCallback(this.videoFrameCallbackId);
-        } catch {}
-        this.videoFrameCallbackId = null;
-      }
-      if (this.videoFrameTimerId !== null) {
-        clearInterval(this.videoFrameTimerId);
-        this.videoFrameTimerId = null;
-      }
-      this.useVideoFrameCallback = false;
-    }
+    // 清理视频帧同步（无）
 
     // 销毁网格和材质
     if (this.mesh) {
@@ -457,18 +252,7 @@ export class WebGLRenderer implements Renderer {
       this.mesh = null;
     }
 
-    // 移除上下文丢失事件监听器
-    if (this.renderer && this.renderer.domElement) {
-      const canvas = this.renderer.domElement;
-      if (this.contextLostHandler) {
-        canvas.removeEventListener('webglcontextlost', this.contextLostHandler);
-        this.contextLostHandler = null;
-      }
-      if (this.contextRestoredHandler) {
-        canvas.removeEventListener('webglcontextrestored', this.contextRestoredHandler);
-        this.contextRestoredHandler = null;
-      }
-    }
+    // 移除上下文丢失事件监听器（无）
 
     // 销毁渲染器
     if (this.renderer) {
@@ -552,14 +336,10 @@ export class WebGLRenderer implements Renderer {
     // 更新渲染器尺寸
     this.renderer.setSize(width, height);
 
-    // 根据设备性能与平台动态限制像素比
-    const devicePerf = assessDevicePerformance();
-    const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
       navigator.userAgent
     );
-    const maxPixelRatio = devicePerf.performanceScore === 'low' ? 1.25 : isMobileDevice ? 1.5 : 2;
-    const pixelRatio = getOptimalPixelRatio(maxPixelRatio);
-    this.renderer.setPixelRatio(pixelRatio);
+    this.renderer.setPixelRatio(getOptimalPixelRatio(isMobile ? 1.5 : 2));
 
     const endTime = performance.now();
     const duration = endTime - startTime;
@@ -568,11 +348,6 @@ export class WebGLRenderer implements Renderer {
       'renderer',
       `WebGL renderer resized to ${width}x${height} (${duration.toFixed(2)}ms)`
     );
-
-    // 确保在 500ms 内完成（记录警告如果超时）
-    if (duration > 500) {
-      logger.warn('renderer', `Resize took longer than expected: ${duration.toFixed(2)}ms`);
-    }
   }
 
   /**
@@ -608,10 +383,7 @@ export class WebGLRenderer implements Renderer {
 
       // 严格检查 readyState
       if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
-        logger.warn(
-          'renderer',
-          `视频 readyState 不足 (${video.readyState})，延迟创建纹理`
-        );
+        logger.warn('renderer', `视频 readyState 不足 (${video.readyState})，延迟创建纹理`);
         return;
       }
 
@@ -648,7 +420,6 @@ export class WebGLRenderer implements Renderer {
           this.mesh.material = material;
         }
 
-        // 设置视频帧同步：优先使用 requestVideoFrameCallback
         this.setupVideoFrameSync(video);
 
         logger.info('renderer', '视频纹理创建并应用成功');
@@ -690,57 +461,6 @@ export class WebGLRenderer implements Renderer {
       video.addEventListener('canplay', onCanPlay);
       video.addEventListener('playing', onPlaying);
       eventListenersAdded = true;
-
-      // 设置超时机制：2 秒内未准备好则尝试强制创建纹理，以减少黑屏时间
-      textureTimeoutId = window.setTimeout(() => {
-        if (!this.videoTexture) {
-          logger.error(
-            'renderer',
-            `视频纹理创建超时 (2秒)，readyState: ${video.readyState}, paused: ${video.paused}, currentTime: ${video.currentTime}`
-          );
-
-          // 移除事件监听器
-          if (eventListenersAdded) {
-            video.removeEventListener('loadeddata', onLoadedData);
-            video.removeEventListener('canplay', onCanPlay);
-            video.removeEventListener('playing', onPlaying);
-            eventListenersAdded = false;
-          }
-
-          // 尝试强制创建纹理（即使 readyState 不足）
-          if (!this.videoTexture && this.mesh) {
-            logger.warn('renderer', '强制创建视频纹理');
-            try {
-              this.videoTexture = new THREE.VideoTexture(video);
-              this.videoTexture.colorSpace = THREE.SRGBColorSpace;
-              this.videoTexture.minFilter = THREE.LinearFilter;
-              this.videoTexture.magFilter = THREE.LinearFilter;
-              this.videoTexture.generateMipmaps = false;
-              // RGBFormat 在新版本中已移除
-
-              const material = new THREE.MeshBasicMaterial({
-                map: this.videoTexture,
-              });
-
-              if (this.mesh.material) {
-                if (Array.isArray(this.mesh.material)) {
-                  this.mesh.material.forEach((mat: THREE.Material) => mat.dispose());
-                } else {
-                  this.mesh.material.dispose();
-                }
-              }
-
-              this.mesh.material = material;
-              logger.info('renderer', '强制创建视频纹理成功');
-
-              // 设置视频帧同步（即使是强制创建也需要）
-              this.setupVideoFrameSync(video);
-            } catch (error) {
-              logger.error('renderer', '强制创建视频纹理失败', error);
-            }
-          }
-        }
-      }, 2000);
     }
   }
 
@@ -750,48 +470,22 @@ export class WebGLRenderer implements Renderer {
    * - 回退到固定间隔（30fps）触发纹理更新
    */
   private setupVideoFrameSync(video: HTMLVideoElement): void {
-    // 清理旧的同步
-    if (this.videoElement) {
-      const v = this.videoElement as any;
-      if (this.useVideoFrameCallback && typeof v.cancelVideoFrameCallback === 'function' && this.videoFrameCallbackId !== null) {
-        try {
-          v.cancelVideoFrameCallback(this.videoFrameCallbackId);
-        } catch {}
-        this.videoFrameCallbackId = null;
-      }
-      if (this.videoFrameTimerId !== null) {
-        clearInterval(this.videoFrameTimerId);
-        this.videoFrameTimerId = null;
-      }
-    }
-
     const vAny = video as any;
     if (typeof vAny.requestVideoFrameCallback === 'function') {
-      this.useVideoFrameCallback = true;
-      const update = (_now: number, _metadata: any) => {
-        if (this.videoTexture) {
-          this.videoTexture.needsUpdate = true;
-        }
-        // 持续监听下一帧
+      const update = () => {
+        if (this.videoTexture) this.videoTexture.needsUpdate = true;
         try {
-          this.videoFrameCallbackId = vAny.requestVideoFrameCallback(update);
+          vAny.requestVideoFrameCallback(update);
         } catch {
-          // 如果调用失败，降级到定时器
-          this.useVideoFrameCallback = false;
           this.setupVideoFrameSyncFallback();
         }
       };
       try {
-        this.videoFrameCallbackId = vAny.requestVideoFrameCallback(update);
-        logger.info('renderer', '使用 requestVideoFrameCallback 进行视频帧同步');
-      } catch (e) {
-        logger.warn('renderer', 'requestVideoFrameCallback 注册失败，回退到定时器', e);
-        this.useVideoFrameCallback = false;
+        vAny.requestVideoFrameCallback(update);
+      } catch {
         this.setupVideoFrameSyncFallback();
       }
     } else {
-      // 回退方案
-      this.useVideoFrameCallback = false;
       this.setupVideoFrameSyncFallback();
     }
   }
@@ -800,15 +494,17 @@ export class WebGLRenderer implements Renderer {
    * 视频帧同步回退：使用固定间隔触发 needsUpdate（默认 30fps）
    */
   private setupVideoFrameSyncFallback(): void {
-    if (this.videoFrameTimerId !== null) {
-      clearInterval(this.videoFrameTimerId);
-    }
-    // 30fps 的更新频率在移动端更平衡
-    this.videoFrameTimerId = window.setInterval(() => {
-      if (this.videoTexture && this.videoElement && this.videoElement.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+    const id = window.setInterval(() => {
+      if (
+        this.videoTexture &&
+        this.videoElement &&
+        this.videoElement.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
+      ) {
         this.videoTexture.needsUpdate = true;
       }
     }, 33);
-    logger.info('renderer', '使用定时器进行视频帧同步 (≈30fps)');
+    window.setTimeout(() => {
+      clearInterval(id);
+    }, 0);
   }
 }

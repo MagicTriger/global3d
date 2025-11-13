@@ -58,7 +58,6 @@ import { ref, defineOptions } from 'vue';
 import { useRouter } from 'vue-router';
 import PanoramaPlayer from '../components/PanoramaPlayer.vue';
 import { useGlobalLoading } from '../composables/useGlobalLoading';
-import { getDefaultPanoramaVideoUrl } from '../utils/env';
 // 显式命名组件以支持 KeepAlive 精确缓存
 defineOptions({ name: 'Home' });
 // 路由实例
@@ -74,8 +73,7 @@ const BASE = import.meta.env.BASE_URL;
 
 // 视频源配置 - 默认从配置读取，可通过 env 统一注入
 const poster = BASE + 'vite.svg';
-const defaultVideo = getDefaultPanoramaVideoUrl();
-const mediumQualityVideo = defaultVideo; // 默认使用 MP4(H.264) 源
+const mediumQualityVideo = BASE + 'videos/大殿全景.mp4';
 
 // 初始视角配置
 const initialPitchDeg = 20; // 略向下以鸟瞰效果
