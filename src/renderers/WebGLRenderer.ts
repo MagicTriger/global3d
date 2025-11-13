@@ -20,6 +20,9 @@ export class WebGLRenderer implements Renderer {
   private videoElement: HTMLVideoElement | null = null;
   private animationFrameId: number | null = null;
   private isDisposed = false;
+  private resizeObserver: ResizeObserver | null = null;
+  private orientationChangeHandler: (() => void) | null = null;
+  private resizeTimeout: number | null = null;
 
   constructor() {}
 
@@ -97,12 +100,8 @@ export class WebGLRenderer implements Renderer {
       // 初始化触摸控制
       this.initControls();
 
-      // 设置尺寸调整（简单窗口 resize）
-      window.addEventListener('resize', () => {
-        if (this.container && this.renderer && this.camera) {
-          this.resize(this.container.clientWidth, this.container.clientHeight);
-        }
-      });
+      // 尺寸监听（容器与窗口/方向）
+      this.setupResponsiveResize();
 
       // 启动渲染循环
       this.startRenderLoop();
@@ -130,7 +129,45 @@ export class WebGLRenderer implements Renderer {
   /**
    * 设置响应式尺寸调整
    */
-  private setupResponsiveResize(): void {}
+  private setupResponsiveResize(): void {
+    if (!this.container) return;
+    const container = this.container;
+    // ResizeObserver 监听容器尺寸变化
+    this.resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (this.resizeTimeout !== null) {
+          clearTimeout(this.resizeTimeout);
+        }
+        this.resizeTimeout = window.setTimeout(() => {
+          const { width, height } = entry.contentRect;
+          if (width > 0 && height > 0) {
+            this.resize(width, height);
+          }
+        }, 100);
+      }
+    });
+    this.resizeObserver.observe(container);
+
+    // 方向变化与窗口 resize 后备
+    this.orientationChangeHandler = () => {
+      setTimeout(() => {
+        if (this.container) {
+          this.resize(this.container.clientWidth, this.container.clientHeight);
+        }
+      }, 300);
+    };
+    window.addEventListener('orientationchange', this.orientationChangeHandler);
+    window.addEventListener('resize', this.orientationChangeHandler);
+
+    // 若初始为 0 大小，等待下一帧再尝试一次
+    requestAnimationFrame(() => {
+      if (this.container && this.renderer && this.camera) {
+        const w = this.container.clientWidth;
+        const h = this.container.clientHeight;
+        if (w > 0 && h > 0) this.resize(w, h);
+      }
+    });
+  }
 
   /**
    * 初始化触摸控制
@@ -221,7 +258,20 @@ export class WebGLRenderer implements Renderer {
     // 停止渲染循环
     this.stopRenderLoop();
 
-    // 清理 resize 相关资源（无）
+    // 清理 resize 相关资源
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect();
+      this.resizeObserver = null;
+    }
+    if (this.resizeTimeout !== null) {
+      clearTimeout(this.resizeTimeout);
+      this.resizeTimeout = null;
+    }
+    if (this.orientationChangeHandler) {
+      window.removeEventListener('orientationchange', this.orientationChangeHandler);
+      window.removeEventListener('resize', this.orientationChangeHandler);
+      this.orientationChangeHandler = null;
+    }
 
     // 销毁控制器
     if (this.controls) {

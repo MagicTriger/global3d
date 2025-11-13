@@ -38,7 +38,7 @@ onMounted(() => {
     const url = getDefaultPanoramaVideoUrl();
     const link = document.createElement('link');
     link.rel = 'preload';
-    link.as = 'video';
+    link.as = 'fetch';
     link.href = url;
     document.head.appendChild(link);
   });

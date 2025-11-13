@@ -394,37 +394,7 @@ async function initializePlayer() {
       // 微信浏览器检测
       const timeoutDuration = 1000;
 
-      // 设置超时机制：如果超时没有触发事件，强制显示内容
-      const forceShowTimeout = setTimeout(() => {
-        if (!readyEventEmitted && rendererManager.currentRenderer.value && videoRef.value) {
-          logger.info('video', `超时触发：强制显示内容（${timeoutDuration}ms）`);
-
-          // 通知渲染器
-          if (!videoReadyNotified) {
-            rendererManager.currentRenderer.value.onVideoReady(videoRef.value);
-            videoReadyNotified = true;
-          }
-
-          // 隐藏加载状态
-          isLoading.value = false;
-          loadingMessage.value = '';
-
-          // 发射 ready 事件
-          window.dispatchEvent(
-            new CustomEvent('panorama:loaded', {
-              detail: {
-                rendererType: selectedRendererType,
-                capabilities,
-              },
-            })
-          );
-          emit('ready');
-          readyEventEmitted = true;
-
-          // 兜底：强制显示后同样等待首帧渲染通知
-          emitFirstFrameAfterRender();
-        }
-      }, timeoutDuration);
+      // 取消超时强制显示逻辑，改为基于事件与首帧确认隐藏加载层
 
       // loadeddata 事件 - 视频首帧数据加载完成（最早可显示内容）
       let firstFrameEmitted = false;
@@ -463,7 +433,7 @@ async function initializePlayer() {
       }
 
       const handleLoadedData = () => {
-        clearTimeout(forceShowTimeout);
+        
         // 在 loadeddata 时就通知渲染器创建纹理，最早显示内容
         if (!videoReadyNotified && rendererManager.currentRenderer.value && videoRef.value) {
           rendererManager.currentRenderer.value.onVideoReady(videoRef.value);
@@ -481,7 +451,6 @@ async function initializePlayer() {
             new CustomEvent('panorama:loaded', {
               detail: {
                 rendererType: selectedRendererType,
-                capabilities,
               },
             })
           );
@@ -498,7 +467,7 @@ async function initializePlayer() {
 
       // canplay 事件 - 视频可以开始播放
       const handleCanPlay = () => {
-        clearTimeout(forceShowTimeout);
+        
 
         // 确保渲染器已通知
         if (!videoReadyNotified && rendererManager.currentRenderer.value && videoRef.value) {
@@ -516,7 +485,6 @@ async function initializePlayer() {
             new CustomEvent('panorama:loaded', {
               detail: {
                 rendererType: selectedRendererType,
-                capabilities,
               },
             })
           );
@@ -531,7 +499,7 @@ async function initializePlayer() {
 
       // 播放事件 - 视频开始播放
       const handlePlaying = () => {
-        clearTimeout(forceShowTimeout);
+        
 
         isLoading.value = false;
         isBuffering.value = false;
@@ -551,7 +519,6 @@ async function initializePlayer() {
             new CustomEvent('panorama:loaded', {
               detail: {
                 rendererType: selectedRendererType,
-                capabilities,
               },
             })
           );

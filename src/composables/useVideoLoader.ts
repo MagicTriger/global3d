@@ -70,6 +70,7 @@ export function useVideoLoader() {
       video.addEventListener('error', handleError)
 
       video.src = source.url
+      try { video.load() } catch {}
 
       setTimeout(() => {
         cleanup()
@@ -135,6 +136,22 @@ export function useVideoLoader() {
     try {
       setupVideoAttributes(video, cfg)
       await tryLoad(video)
+      // 首帧预解码：等待元数据、探测 currentTime、一次 play/pause
+      try {
+        const PRIME_TIMEOUT = 1500
+        if (video.readyState < HTMLMediaElement.HAVE_METADATA) {
+          await new Promise<void>((resolve) => {
+            const onLoadedMetadata = () => { video.removeEventListener('loadedmetadata', onLoadedMetadata); resolve() }
+            video.addEventListener('loadedmetadata', onLoadedMetadata, { once: true })
+            setTimeout(() => { video.removeEventListener('loadedmetadata', onLoadedMetadata); resolve() }, PRIME_TIMEOUT)
+          })
+        }
+        try { video.currentTime = 0.001 } catch {}
+        const originalMuted = video.muted
+        video.muted = true
+        try { await video.play(); video.pause() } catch {}
+        video.muted = originalMuted
+      } catch {}
       logger.info('video', '视频加载完成')
     } catch (error) {
       logger.error('video', '视频加载最终失败', error)
