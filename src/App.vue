@@ -30,18 +30,18 @@ function handleRetry() {
 onMounted(() => {
   document.documentElement.style.setProperty('--header-h', '0px');
 
-  // 启动全局加载层（最小/最大展示时长）
-  start({ minMs: 1200, maxMs: 8000 });
+  // 启动全局加载层（按就绪事件关闭，延长最大展示时长避免弱网过早隐藏）
+  start({ minMs: 1200, maxMs: 30000 });
   attach();
 
-  deferNonCriticalTask(() => {
-    const url = getDefaultPanoramaVideoUrl();
-    const link = document.createElement('link');
-    link.rel = 'preload';
-    link.as = 'fetch';
-    link.href = url;
-    document.head.appendChild(link);
-  });
+  // 监听渲染就绪事件，及时关闭加载层
+  const onReady = () => {
+    detach();
+    window.removeEventListener('panorama:first-frame-rendered', onReady as EventListener);
+    window.removeEventListener('panorama:loaded', onReady as EventListener);
+  };
+  window.addEventListener('panorama:first-frame-rendered', onReady as EventListener);
+  window.addEventListener('panorama:loaded', onReady as EventListener);
 });
 
 onUnmounted(() => {

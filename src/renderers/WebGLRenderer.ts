@@ -544,7 +544,7 @@ export class WebGLRenderer implements Renderer {
    * 视频帧同步回退：使用固定间隔触发 needsUpdate（默认 30fps）
    */
   private setupVideoFrameSyncFallback(): void {
-    const id = window.setInterval(() => {
+    window.setInterval(() => {
       if (
         this.videoTexture &&
         this.videoElement &&
@@ -553,8 +553,5 @@ export class WebGLRenderer implements Renderer {
         this.videoTexture.needsUpdate = true;
       }
     }, 33);
-    window.setTimeout(() => {
-      clearInterval(id);
-    }, 0);
   }
 }
