@@ -24,7 +24,10 @@ export function useVideoLoader() {
     video.autoplay = cfg.autoplay
     video.muted = true
     video.loop = cfg.loop
-    video.preload = 'metadata'
+    const conn: any = (navigator as any).connection || (navigator as any).mozConnection || (navigator as any).webkitConnection
+    const effective: string | undefined = conn && conn.effectiveType
+    const fast = effective === '4g' || effective === 'wifi'
+    video.preload = fast ? 'auto' : 'metadata'
     video.playsInline = true
     video.setAttribute('playsinline', '')
     video.setAttribute('webkit-playsinline', '')
@@ -115,7 +118,17 @@ export function useVideoLoader() {
   async function loadHls(video: HTMLVideoElement, url: string): Promise<void> {
     if (isIOS()) { video.src = url; return }
     if (!Hls.isSupported()) throw new Error('浏览器不支持 HLS')
-    const hls = new Hls({ startPosition: 0, enableWorker: true })
+    const hls = new Hls({
+      startPosition: 0,
+      enableWorker: true,
+      lowLatencyMode: false,
+      capLevelToPlayerSize: true,
+      maxBufferLength: 15,
+      maxMaxBufferLength: 30,
+      maxBufferSize: 30 * 1000 * 1000,
+      abrEwmaDefaultEstimate: 500000,
+      abrBandWidthFactor: 0.8,
+    })
     hls.loadSource(url)
     hls.attachMedia(video)
     await new Promise<void>((resolve, reject) => {
