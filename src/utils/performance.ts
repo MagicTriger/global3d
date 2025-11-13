@@ -21,3 +21,15 @@ export function throttle<T extends (...args: any[]) => any>(fn: T, wait: number)
     }
   }
 }
+
+export function requestIdleCallback(callback: () => void, options?: { timeout?: number }): number {
+  if (typeof (window as any).requestIdleCallback === 'function') {
+    return (window as any).requestIdleCallback(callback, options)
+  } else {
+    return window.setTimeout(callback, options?.timeout ?? 1) as unknown as number
+  }
+}
+
+export function deferNonCriticalTask(task: () => void, timeout = 2000): number {
+  return requestIdleCallback(task, { timeout })
+}
